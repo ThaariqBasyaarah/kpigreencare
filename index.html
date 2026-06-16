@@ -477,7 +477,69 @@ window.onload = async function() {
   renderSubPosisiDropdown();
   document.getElementById('subPosisi').value = firstSub;
   loadTemplateFromState(firstSub);
+
+  // ── REALTIME LISTENERS ──────────────────────────────────────────────────────
+  // arsip_nilai: sync riwayat & analitik otomatis
+  sb.channel('rt-arsip')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'arsip_nilai' }, async () => {
+      const { data } = await sb.from('arsip_nilai').select('*').order('created_at', { ascending: false });
+      arsip = data || [];
+      renderFilterDropdowns();
+      const activeTab = document.querySelector('.tab-btn.active')?.dataset.tab;
+      if (activeTab === 'dashboard') renderDashboard();
+      if (activeTab === 'analitik')  renderAnalitik();
+      showSyncToast('📊 Riwayat penilaian diperbarui');
+    })
+    .subscribe();
+
+  // template_kpi: reload template jika sub-posisi aktif berubah dari device lain
+  sb.channel('rt-template')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'template_kpi' }, async (payload) => {
+      const { data: td2 } = await sb.from('template_kpi').select('data').eq('id', TEMPLATE_ID).single();
+      if (!td2?.data) return;
+      // Hanya update jika bukan dari device ini sendiri (saveTimer = null = tidak sedang ngetik)
+      if (saveTimer) return;
+      const sub = document.getElementById('subPosisi').value;
+      const oldJSON = JSON.stringify(template[sub]);
+      template = td2.data;
+      if (JSON.stringify(template[sub]) !== oldJSON) {
+        loadTemplateFromState(sub);
+        showSyncToast('🔄 Template KPI diperbarui');
+      }
+    })
+    .subscribe();
+
+  // struktur: sync dropdown divisi & posisi
+  sb.channel("rt-struktur")
+    .on("postgres_changes", { event: "*", schema: "public", table: "struktur" }, async () => {
+      const { data: sd2 } = await sb.from("struktur").select("data").eq("id", STRUKTUR_ID).single();
+      if (!sd2?.data) return;
+      struktur = sd2.data;
+      renderDivisiDropdown();
+      renderSubPosisiDropdown();
+      renderManageSub();
+      renderStruktur();
+      renderFilterDropdowns();
+      showSyncToast("🏢 Struktur organisasi diperbarui");
+    })
+    .subscribe();
 };
+
+// ── SYNC TOAST ────────────────────────────────────────────────────────────────
+let toastTimer = null;
+function showSyncToast(msg) {
+  let toast = document.getElementById('syncToast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'syncToast';
+    toast.style.cssText = 'position:fixed;bottom:72px;left:50%;transform:translateX(-50%);background:#1f2937;color:#fff;padding:8px 16px;border-radius:20px;font-size:12px;font-weight:600;z-index:999;box-shadow:0 4px 12px rgba(0,0,0,.25);transition:opacity .3s;white-space:nowrap';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.style.opacity = '1';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toast.style.opacity = '0'; }, 3000);
+}
 
 // ─── DROPDOWN RENDERS ────────────────────────────────────────────────────────
 function renderDivisiDropdown() {
@@ -941,20 +1003,23 @@ function renderManageSub() {
 }
 
 async function simpanStruktur() {
+  await sb.from("struktur").upsert({ id: STRUKTUR_ID, data: struktur });
   renderDivisiDropdown();
-  await sb.from('struktur').upsert({ id: STRUKTUR_ID, data: struktur });
+  renderSubPosisiDropdown();
+  renderManageSub();
+  renderStruktur();
 }
 
-function tambahDivisi() {
-  const nama = document.getElementById('inputDivisiBaru').value.trim();
+async function tambahDivisi() {
+  const nama = document.getElementById("inputDivisiBaru").value.trim();
   if (!nama || struktur[nama]) return;
   struktur[nama] = [];
-  document.getElementById('inputDivisiBaru').value = '';
-  simpanStruktur();
+  document.getElementById("inputDivisiBaru").value = "";
+  await simpanStruktur();
 }
 
 function hapusDivisi() {
-  const target = document.getElementById('selectHapusDivisi').value;
+  const target = document.getElementById("selectHapusDivisi").value;
   if (!target) return;
   konfirmasi(`Hapus divisi "${target}" beserta semua sub-posisinya?`, async () => {
     delete struktur[target];
@@ -963,28 +1028,29 @@ function hapusDivisi() {
 }
 
 async function tambahSub() {
-  const div = document.getElementById('manageDivisiCtx').value;
-  const nama = document.getElementById('inputSubBaru').value.trim();
+  const div = document.getElementById("manageDivisiCtx").value;
+  const nama = document.getElementById("inputSubBaru").value.trim();
   if (!div || !nama || (struktur[div] || []).includes(nama)) return;
   struktur[div] = [...(struktur[div] || []), nama];
-  const newTpl = { ...template, [nama]: { kpi:[{area:'General',kpi:`KPI ${nama}`,bobot:100,logika:'max',target:100,realisasi:100,cara:'Internal'}], kompetensi:[{nama:'Kompetensi Utama',bobot:100,skor:85}] } };
+  const newTpl = { ...template, [nama]: { kpi:[{area:"General",kpi:`KPI ${nama}`,bobot:100,logika:"max",target:100,realisasi:100,cara:"Internal"}], kompetensi:[{nama:"Kompetensi Utama",bobot:100,skor:85}] } };
   template = newTpl;
-  document.getElementById('inputSubBaru').value = '';
-  await sb.from('struktur').upsert({ id: STRUKTUR_ID, data: struktur });
-  await sb.from('template_kpi').upsert({ id: TEMPLATE_ID, data: newTpl });
-  renderStruktur();
+  document.getElementById("inputSubBaru").value = "";
+  await sb.from("struktur").upsert({ id: STRUKTUR_ID, data: struktur });
+  await sb.from("template_kpi").upsert({ id: TEMPLATE_ID, data: newTpl });
   renderDivisiDropdown();
   renderSubPosisiDropdown();
+  renderManageSub();
+  renderStruktur();
+  renderFilterDropdowns();
 }
 
 function hapusSub() {
-  const div    = document.getElementById('manageDivisiCtx').value;
-  const target = document.getElementById('selectHapusSub').value;
+  const div    = document.getElementById("manageDivisiCtx").value;
+  const target = document.getElementById("selectHapusSub").value;
   if (!div || !target) return;
   konfirmasi(`Hapus sub-posisi "${target}" dari divisi ${div}?`, async () => {
     struktur[div] = struktur[div].filter(s => s !== target);
     await simpanStruktur();
-    renderManageSub();
   });
 }
 
@@ -1023,7 +1089,7 @@ function imporData(e) {
         struktur = d.subPosisiDb; template = d.templateKpiDb;
         const { data: fresh } = await sb.from('arsip_nilai').select('*').order('created_at',{ ascending:false });
         arsip = fresh || [];
-        renderDivisiDropdown(); renderDashboard(); renderFilterDropdowns();
+        renderDivisiDropdown(); renderSubPosisiDropdown(); renderManageSub(); renderStruktur(); renderDashboard(); renderFilterDropdowns();
         alert('✅ Data berhasil di-restore!');
       });
     } catch { alert('File tidak dapat dibaca.'); }
