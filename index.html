@@ -1,973 +1,1036 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KPI Homecare Greencare v8.5</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script>
-        // ============================================================
-        // KONFIGURASI SUPABASE — GANTI DENGAN CREDENTIALS KAMU
-        // ============================================================
-        const SUPABASE_URL = 'https://cwcxctmcdhahdfuiexel.supabase.co';
-        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN3Y3hjdG1jZGhhaGRmdWlleGVsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1NTU5MjAsImV4cCI6MjA5NzEzMTkyMH0.L3Kelsl3tMur3HzkSZl36XqUq7-y39t6SQO3BcOLRhY';
-        // ============================================================
-        const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-        const STRUKTUR_ID  = '00000000-0000-0000-0000-000000000001';
-        const TEMPLATE_ID  = '00000000-0000-0000-0000-000000000002';
-    </script>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f9f6; color: #333; }
-        .container { max-width: 1350px; margin: auto; background: white; padding: 25px; border-radius: 8px; box-shadow: 0 0 15px rgba(39, 174, 96, 0.1); }
-        
-        h2.main-title { 
-            font-family: Arial, sans-serif; 
-            font-size: 14px; 
-            text-align: center; 
-            background-color: #27ae60; 
-            color: white; 
-            padding: 12px; 
-            margin-top: 0; 
-            border-radius: 4px;
-            letter-spacing: 1px;
-            text-transform: uppercase;
-        }
-        
-        h3 { border-left: 5px solid #2ecc71; padding-left: 10px; color: #1e8449; margin-top: 30px; }
-        .flex-header { display: flex; gap: 15px; background: #e8f8f5; padding: 15px; border: 1px solid #a3e4d7; border-radius: 4px; margin-bottom: 20px; flex-wrap: wrap; align-items: flex-end; }
-        .flex-header div { flex: 1; min-width: 180px; }
-        
-        /* PANEL SEED & RECOVERY DATA */
-        .sync-panel { background: #fdf2e9; border: 1px solid #f5b041; padding: 10px 15px; border-radius: 4px; margin-bottom: 15px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
-        .sync-buttons { display: flex; gap: 10px; }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>KPI Homecare Greencare</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+/* ── RESET & BASE ── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f0fdf4;color:#111827;min-height:100vh;display:flex;flex-direction:column;overflow-x:hidden}
+input,select,button{font-family:inherit}
+button{cursor:pointer}
 
-        .filter-box { display: flex; gap: 15px; background: #f2f4f4; padding: 12px; border-radius: 4px; margin-bottom: 15px; align-items: center; flex-wrap: wrap; }
-        .dashboard-box { background: #fdfefe; border: 2px solid #27ae60; padding: 20px; border-radius: 8px; margin-top: 30px; }
-        .ai-box { background: #f4fbf7; border: 2px solid #2ecc71; padding: 20px; border-radius: 8px; margin-top: 30px; }
-        
-        table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 14px; table-layout: fixed; }
-        th, td { border: 1px solid #d4efdf; padding: 10px; text-align: left; word-wrap: break-word; }
-        th { background-color: #27ae60; color: white; }
-        
-        /* ALOKASI LEBAR KOLOM TABEL INPUT KPI */
-        .col-area { width: 14%; }
-        .col-kpi { width: 22%; }
-        .col-bobot { width: 6%; }
-        .col-logika { width: 11%; }
-        .col-target { width: 7%; }
-        .col-realisasi { width: 7%; }
-        .col-capaian { width: 7%; }
-        .col-nilai { width: 7%; }
-        .col-cara { width: 14%; }
-        .col-aksi { width: 5%; }
-        
-        table input[type="number"], table select { width: 100%; box-sizing: border-box; padding: 4px; }
-        
-        .editable-cell { background-color: #fff9c4; font-weight: 500; color: #2c3e50; }
-        .total-row { font-weight: bold; background-color: #e8f8f5; }
-        .final-box { background-color: #27ae60; color: white; padding: 15px; text-align: center; font-size: 18px; font-weight: bold; border-radius: 4px; margin-bottom: 25px; }
-        
-        .btn { background-color: #27ae60; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
-        .btn:hover { background-color: #219653; }
-        .btn-sm { padding: 5px 10px; font-size: 12px; min-height: 32px; margin: 2px; }
-        .btn-blue { background-color: #2980b9; }
-        .btn-blue:hover { background-color: #1f618d; }
-        .btn-orange { background-color: #d35400; }
-        .btn-orange:hover { background-color: #a04000; }
-        .btn-purple { background-color: #16a085; }
-        .btn-purple:hover { background-color: #117a65; }
-        .btn-danger { background-color: #e74c3c; }
-        .btn-grey { background-color: #7f8c8d; }
-        
-        .badge { padding: 5px 10px; border-radius: 4px; color: white; font-weight: bold; font-size: 12px; text-align: center; display: inline-block; }
-        
-        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); overflow: auto; }
-        .modal-content { background-color: white; margin: 5% auto; padding: 25px; border-radius: 8px; width: 85%; max-width: 1100px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
-        .close-btn { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
-        .close-btn:hover { color: black; }
-        
-        .ai-recommendation { background: #eaf2f8; border-left: 5px solid #2980b9; padding: 15px; margin-top: 15px; border-radius: 4px; }
-        .chart-container { max-width: 600px; margin: 20px auto; background: #fff; padding: 15px; border-radius: 6px; border: 1px solid #d4efdf; }
-        .notice-save { color: #27ae60; font-size: 12px; font-weight: bold; margin-top: 5px; display: block; }
-    </style>
+/* ── HEADER ── */
+.header{background:linear-gradient(135deg,#16a34a 0%,#15803d 100%);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;box-shadow:0 2px 8px rgba(0,0,0,.15);position:sticky;top:0;z-index:100}
+.header-brand{display:flex;align-items:center;gap:10px}
+.header-logo{font-size:26px;line-height:1}
+.header-title{color:#fff;font-weight:800;font-size:15px;letter-spacing:-.02em;line-height:1.1}
+.header-sub{color:#bbf7d0;font-size:11px;font-weight:500}
+.header-actions{display:flex;gap:6px;flex-shrink:0}
+.btn-header{background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:600;white-space:nowrap;transition:background .15s}
+.btn-header:hover{background:rgba(255,255,255,.28)}
+
+/* ── TAB NAV ── */
+.tabnav{background:#fff;border-bottom:1.5px solid #d1fae5;display:flex;overflow-x:auto;scrollbar-width:none;flex-shrink:0}
+.tabnav::-webkit-scrollbar{display:none}
+.tab-btn{flex:1;min-width:70px;padding:10px 4px 8px;border:none;background:none;color:#6b7280;font-weight:500;font-size:12px;display:flex;flex-direction:column;align-items:center;gap:3px;border-bottom:3px solid transparent;transition:all .15s;white-space:nowrap}
+.tab-btn.active{color:#16a34a;border-bottom-color:#16a34a;font-weight:700}
+.tab-btn .tab-icon{font-size:18px;line-height:1}
+
+/* ── CONTENT ── */
+.content{flex:1;overflow-y:auto;padding:12px 12px 80px;display:flex;flex-direction:column;gap:12px}
+.tab-pane{display:none;flex-direction:column;gap:12px}
+.tab-pane.active{display:flex}
+
+/* ── CARDS ── */
+.card{background:#fff;border-radius:14px;box-shadow:0 1px 6px rgba(0,0,0,.07);padding:16px}
+.card-title{font-weight:700;font-size:14px;color:#15803d;margin-bottom:12px;display:flex;align-items:center;gap:6px}
+
+/* ── FORM CONTROLS ── */
+.field-label{font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:4px}
+.field-input{width:100%;padding:8px 10px;border:1.5px solid #d1fae5;border-radius:8px;font-size:13px;outline:none;background:#fff;transition:border .15s}
+.field-input:focus{border-color:#16a34a}
+.field-select{width:100%;padding:8px 10px;border:1.5px solid #d1fae5;border-radius:8px;font-size:13px;background:#fff;outline:none;transition:border .15s}
+.field-select:focus{border-color:#16a34a}
+.form-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:10px}
+
+/* ── BUTTONS ── */
+.btn{border:none;border-radius:8px;font-weight:600;cursor:pointer;transition:opacity .15s;color:#fff;white-space:nowrap}
+.btn:hover{opacity:.88}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-sm{padding:6px 12px;font-size:12px}
+.btn-md{padding:9px 18px;font-size:13px}
+.btn-green{background:#16a34a}
+.btn-blue{background:#2563eb}
+.btn-red{background:#ef4444}
+.btn-purple{background:#7c3aed}
+.btn-cyan{background:#0891b2}
+.btn-ghost{background:rgba(255,255,255,.25)}
+.btn-full{width:100%}
+
+/* ── BADGE ── */
+.badge{display:inline-block;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;color:#fff;white-space:nowrap}
+
+/* ── KPI CARD (item row) ── */
+.kpi-card{background:#f0fdf4;border-radius:10px;padding:12px;border:1px solid #d1fae5;position:relative}
+.kpi-card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.kpi-card-num{font-weight:700;font-size:12px;color:#16a34a}
+.kpi-card-del{background:#fee2e2;border:none;color:#ef4444;border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer;font-weight:700}
+.kpi-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+.kpi-grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px}
+.kpi-stat{flex:1;border-radius:8px;padding:6px 10px;text-align:center}
+.kpi-stat-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.kpi-stat-val{font-weight:800;font-size:15px;margin-top:1px}
+.kpi-stats-row{display:flex;gap:8px;margin-top:8px}
+
+/* ── KOM CARD ── */
+.kom-card{background:#faf5ff;border-radius:10px;padding:12px;border:1px solid #e9d5ff}
+.kom-grid{display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px}
+
+/* ── TOTALS BAR ── */
+.totals-bar{border-radius:10px;padding:10px 14px;margin-top:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px}
+.totals-bar span{font-size:12px;font-weight:600}
+.totals-bar strong{font-size:15px}
+
+/* ── NILAI AKHIR BOX ── */
+.nilai-box{border-radius:14px;padding:16px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
+.nilai-box-left{}
+.nilai-box-eyebrow{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;opacity:.8;color:#fff}
+.nilai-box-num{font-size:40px;font-weight:900;line-height:1;color:#fff}
+.nilai-box-status{font-size:14px;font-weight:700;margin-top:2px;color:#fff}
+
+/* ── DASHBOARD CARDS ── */
+.arsip-card{background:#fff;border-radius:14px;box-shadow:0 1px 6px rgba(0,0,0,.07);padding:14px;border-left:4px solid #16a34a}
+.arsip-card-top{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.arsip-card-name{font-weight:700;font-size:15px}
+.arsip-card-sub{font-size:12px;color:#6b7280;margin-top:2px}
+.arsip-card-score{font-weight:900;font-size:26px;line-height:1}
+.arsip-mini-stats{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.arsip-mini-stat{flex:1;min-width:70px;border-radius:8px;padding:6px 10px;text-align:center}
+.arsip-actions{display:flex;gap:8px;flex-wrap:wrap}
+
+/* ── ANALITIK ── */
+.analitik-card{background:#fff;border-radius:14px;box-shadow:0 1px 6px rgba(0,0,0,.07);padding:14px;border-left:4px solid #16a34a}
+.analitik-top{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+
+/* ── STRUKTUR ── */
+.div-chip{background:#d1fae5;color:#15803d;border-radius:6px;padding:3px 10px;font-size:12px;font-weight:600;display:inline-block;margin:2px}
+
+/* ── EMPTY STATE ── */
+.empty-state{text-align:center;padding:40px 20px;color:#9ca3af}
+.empty-state .empty-icon{font-size:44px;margin-bottom:10px}
+.empty-state .empty-title{font-weight:600;font-size:15px;margin-bottom:4px}
+.empty-state .empty-sub{font-size:12px}
+
+/* ── SAVE STATUS ── */
+.save-status{font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px}
+.save-saving{background:#fef3c7;color:#92400e}
+.save-saved{background:#d1fae5;color:#15803d}
+
+/* ── MODAL ── */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;align-items:center;justify-content:center;padding:16px}
+.modal-overlay.open{display:flex}
+.modal-box{background:#fff;border-radius:16px;width:100%;max-width:560px;max-height:90vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.18)}
+.modal-box.wide{max-width:700px}
+.modal-header{background:#16a34a;border-radius:16px 16px 0 0;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0}
+.modal-header-title{color:#fff;font-weight:700;font-size:14px}
+.modal-close{background:none;border:none;color:#fff;font-size:22px;cursor:pointer;line-height:1;padding:0 4px}
+.modal-body{padding:16px}
+
+/* ── DETAIL MODAL ── */
+.detail-meta{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.detail-meta-item{border-radius:10px;padding:10px 12px}
+.detail-meta-eyebrow{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px}
+.detail-meta-val{font-weight:700;font-size:13px}
+.detail-kpi-item{background:#f9fafb;border-radius:10px;padding:10px 12px;border-left:3px solid #16a34a;margin-bottom:8px}
+.detail-kpi-top{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:6px;margin-bottom:6px}
+.detail-kpi-name{font-weight:700;font-size:13px}
+.detail-kpi-area{font-size:11px;color:#6b7280}
+.detail-kpi-stats{display:flex;gap:12px;flex-wrap:wrap}
+.detail-kpi-stat{font-size:12px;color:#6b7280}
+
+/* ── AI MODAL ── */
+.ai-item{background:#fef2f2;border-radius:10px;padding:12px;border-left:3px solid #ef4444;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+.ai-rekom{background:#eff6ff;border-left:4px solid #2563eb;border-radius:0 10px 10px 0;padding:14px 16px;margin-top:12px}
+.ai-rekom-title{font-weight:700;color:#1d4ed8;margin-bottom:6px;font-size:13px}
+.ai-rekom-text{font-size:13px;color:#374151;line-height:1.6;margin-bottom:8px}
+.ai-rekom ol{padding-left:18px;font-size:13px;color:#374151;line-height:1.8}
+
+/* ── CHART ── */
+.chart-wrap{position:relative;height:200px;margin-bottom:4px}
+
+/* ── FILTER BAR ── */
+.filter-bar{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+/* ── RESPONSIVE ── */
+@media(min-width:600px){
+  .form-grid{grid-template-columns:repeat(4,1fr)}
+  .filter-bar{grid-template-columns:repeat(3,1fr)}
+  .detail-meta{grid-template-columns:repeat(3,1fr)}
+  .kpi-grid-3{grid-template-columns:repeat(4,1fr)}
+}
+@media(min-width:900px){
+  .content{max-width:760px;margin:0 auto;width:100%}
+}
+</style>
 </head>
 <body>
 
-<div class="container">
-    <h2 class="main-title">KPI Homecare Greencare - Premium Dashboard</h2>
-    
-    <!-- PANEL TRANSFER DATA ANTAR DEVICE -->
-    <div class="sync-panel">
-        <div>
-            <strong style="color: #d35400;">🔄 Transfer Data Antar Perangkat:</strong>
-            <span style="font-size: 13px; color: #5d6d7e; display: block;">Gunakan tombol ini untuk memindahkan/mencadangkan seluruh template posisi dan riwayat nilai karyawan ke laptop/HP lain.</span>
-        </div>
-        <div class="sync-buttons">
-            <button class="btn btn-blue btn-sm" onclick="eksporSeluruhData()">📥 Ekspor Semua Data (Backup)</button>
-            <button class="btn btn-orange btn-sm" onclick="memicuInputFile()">📤 Impor Data (Restore)</button>
-            <input type="file" id="fileImporSembunyi" accept=".json" style="display: none;" onchange="imporSeluruhData(event)">
-        </div>
+<!-- HEADER -->
+<div class="header">
+  <div class="header-brand">
+    <div class="header-logo">🌿</div>
+    <div>
+      <div class="header-title">KPI Homecare</div>
+      <div class="header-sub">Greencare Performance System</div>
     </div>
-
-    <!-- FORM PENILAIAN -->
-    <h3>Form Input Nilai Kinerja</h3>
-    <div class="flex-header">
-        <div><label>Periode:</label><input type="month" id="periode" value="2026-06"></div>
-        <div><label>Nama Karyawan:</label><input type="text" id="namaKaryawan" value="Andi Wijaya"></div>
-        <div>
-            <label>Divisi Utama:</label>
-            <select id="divisi" onchange="renderSubPosisiDropdown()"></select>
-        </div>
-        <div>
-            <label>Sub-Posisi / Turunan:</label>
-            <select id="subPosisi" onchange="muatTemplateBerdasarkanPosisi()"></select>
-        </div>
-        <div><button class="btn btn-sm btn-grey" onclick="bukaModalStruktur()">⚙️ Kelola Divisi & Posisi</button></div>
-    </div>
-
-    <!-- TABEL INPUT UTAMA KPI -->
-    <div style="display: flex; justify-content: space-between; align-items: center;">
-        <h4 style="margin: 5px 0; color: #2c3e50;">💡 Setiap perubahan isi tabel di bawah otomatis tersimpan untuk posisi aktif!</h4>
-        <span class="notice-save" id="saveStatus">✓ Semua perubahan komponen posisi tersimpan otomatis</span>
-    </div>
-    <table id="kpiTable">
-        <colgroup>
-            <col class="col-area">
-            <col class="col-kpi">
-            <col class="col-bobot">
-            <col class="col-logika">
-            <col class="col-target">
-            <col class="col-realisasi">
-            <col class="col-capaian">
-            <col class="col-nilai">
-            <col class="col-cara">
-            <col class="col-aksi">
-        </colgroup>
-        <thead>
-            <tr>
-                <th>Area</th><th>Nama Item KPI</th><th>Bobot (%)</th><th>Logika</th><th>Target</th><th>Realisasi</th><th>Capaian</th><th>Nilai KPI</th><th>Cara Ukur (Sumber Data)</th><th>Aksi</th>
-            </tr>
-        </thead>
-        <tbody id="kpiTableBody"></tbody>
-    </table>
-
-    <div style="margin-bottom:20px;">
-        <button class="btn btn-blue" onclick="tambahBarisKPIDinamis()">+ Tambah Baris KPI Baru</button>
-    </div>
-
-    <!-- TABEL KOMPETENSI DINAMIS -->
-    <h3>Kompetensi Perilaku (25%)</h3>
-    <table id="kompetensiTable" style="max-width: 650px; table-layout: auto; margin-bottom: 10px;">
-        <thead>
-            <tr>
-                <th>Nama Aspek Kompetensi</th>
-                <th style="width: 20%;">Bobot Aspek (%)</th>
-                <th style="width: 25%;">Skor Nilai (1-100)</th>
-                <th style="width: 12%;">Aksi</th>
-            </tr>
-        </thead>
-        <tbody id="kompetensiTableBody"></tbody>
-        <tfoot>
-            <tr class="total-row">
-                <td>Total Kompetensi Terbobot (Hasil Akhir)</td>
-                <td id="totalBobotKompetensi">0%</td>
-                <td id="totalNilaiKompetensi" colspan="2">0</td>
-            </tr>
-        </tfoot>
-    </table>
-    <div style="margin-bottom:25px;">
-        <button class="btn btn-sm btn-blue" onclick="tambahBarisKompetensi('Aspek Baru', 20, 80)">+ Tambah Aspek Kompetensi</button>
-    </div>
-
-    <div class="final-box" id="finalBox">NILAI AKHIR KINERJA: <span id="nilaiAkhirFinal">0</span> | STATUS: <span id="statusFinal">-</span></div>
-    <button class="btn" onclick="simpanKeDatabase()">Simpan Hasil Penilaian</button>
-
-
-    <!-- DASHBOARD 1: ARSIP HISTORI -->
-    <div class="dashboard-box">
-        <h3>📊 Dashboard 1: Riwayat Penilaian Karyawan</h3>
-        <div class="filter-box">
-            <strong>🔍 Saring Data Histori:</strong>
-            <div>
-                <label>Pilih Sub-Posisi:</label>
-                <select id="filterDash1Posisi" onchange="tampilkanDashboard()"></select>
-            </div>
-        </div>
-        <table id="dashboardTable" style="table-layout: auto;">
-            <thead>
-                <tr>
-                    <th>Periode</th><th>Nama Karyawan</th><th>Divisi & Sub-Posisi</th><th>Nilai KPI</th><th>Nilai Komp</th><th>Nilai Akhir</th><th>Status</th><th style="width: 18%;">Aksi Kontrol</th>
-                </tr>
-            </thead>
-            <tbody id="dashboardTableBody"></tbody>
-        </table>
-    </div>
-
-
-    <!-- DASHBOARD 2: ANALITIK PER DIVISI UTAMA -->
-    <div class="ai-box">
-        <h3>🤖 Dashboard 2: Analisis Performa Per Divisi Utama</h3>
-        
-        <div class="filter-box">
-            <strong>🎛️ Filter Analitik & Chart:</strong>
-            <div>
-                <label>Divisi Utama:</label>
-                <select id="filterDash2Divisi" onchange="tampilkanDashboard()"></select>
-            </div>
-            <div>
-                <label>Periode Waktu:</label>
-                <select id="filterDash2Periode" onchange="tampilkanDashboard()"></select>
-            </div>
-        </div>
-
-        <div class="chart-container">
-            <canvas id="performaChart"></canvas>
-        </div>
-        
-        <table id="posisiAnalyticsTable" style="table-layout: auto;">
-            <thead>
-                <tr>
-                    <th>Nama Divisi Utama</th><th>Total Karyawan Dinilai</th><th>Rata-Rata Skor Akhir</th><th>Status Kelulusan Divisi</th><th style="width: 15%;">Aksi Tindakan</th>
-                </tr>
-            </thead>
-            <tbody id="posisiAnalyticsTableBody"></tbody>
-        </table>
-    </div>
-
+  </div>
+  <div class="header-actions">
+    <button class="btn-header" onclick="eksporData()">📥 Ekspor</button>
+    <button class="btn-header" onclick="document.getElementById('fileImpor').click()">📤 Impor</button>
+    <input type="file" id="fileImpor" accept=".json" style="display:none" onchange="imporData(event)">
+  </div>
 </div>
 
+<!-- TAB NAV -->
+<div class="tabnav">
+  <button class="tab-btn active" data-tab="input" onclick="switchTab('input')">
+    <span class="tab-icon">📝</span>Input KPI
+  </button>
+  <button class="tab-btn" data-tab="dashboard" onclick="switchTab('dashboard')">
+    <span class="tab-icon">📊</span>Riwayat
+  </button>
+  <button class="tab-btn" data-tab="analitik" onclick="switchTab('analitik')">
+    <span class="tab-icon">🤖</span>Analitik
+  </button>
+  <button class="tab-btn" data-tab="struktur" onclick="switchTab('struktur')">
+    <span class="tab-icon">⚙️</span>Struktur
+  </button>
+</div>
 
-<!-- MODAL 1: KELOLA STRUKTUR -->
-<div id="strukturModal" class="modal">
-    <div class="modal-content" style="max-width: 600px;">
-        <span class="close-btn" onclick="tutupStrukturModal()">&times;</span>
-        <h2 style="background-color: #7f8c8d;">⚙️ KELOLA STRUKTUR ORGANISASI</h2>
-        
-        <div style="margin-bottom: 20px; border-bottom: 2px solid #ccc; padding-bottom: 15px;">
-            <h4>1. Divisi Utama</h4>
-            <div style="display:flex; gap:10px; margin-bottom:10px;">
-                <input type="text" id="inputDivisiBaru" placeholder="Nama Divisi Baru..." style="flex:1; padding:6px;">
-                <button class="btn btn-sm" onclick="aksiTambahDivisi()">+ Tambah</button>
-            </div>
-            <div style="display:flex; gap:10px;">
-                <select id="selectHapusDivisi" style="flex:1; padding:6px;"></select>
-                <button class="btn btn-sm btn-danger" onclick="aksiHapusDivisi()">Hapus Divisi</button>
-            </div>
-        </div>
+<!-- CONTENT -->
+<div class="content">
 
+  <!-- ══ TAB: INPUT KPI ══ -->
+  <div class="tab-pane active" id="tab-input">
+
+    <!-- Identitas -->
+    <div class="card">
+      <div class="card-title">📋 Identitas Penilaian</div>
+      <div class="form-grid">
         <div>
-            <h4>2. Sub-Posisi / Turunan Jabatan</h4>
-            <label>Pilih Divisi Dahulu:</label>
-            <select id="selectManageDivisiContext" style="width:100%; padding:6px; margin-bottom:10px;" onchange="renderManageSubPosisiList()"></select>
-            
-            <div style="display:flex; gap:10px; margin-bottom:10px;">
-                <input type="text" id="inputSubPosisiBaru" placeholder="Nama Sub-Posisi Baru..." style="flex:1; padding:6px;">
-                <button class="btn btn-sm" onclick="aksiTambahSubPosisi()">+ Tambah</button>
-            </div>
-            <div style="display:flex; gap:10px;">
-                <select id="selectHapusSubPosisi" style="flex:1; padding:6px;"></select>
-                <button class="btn btn-sm btn-danger" onclick="aksiHapusSubPosisi()">Hapus Posisi</button>
-            </div>
+          <label class="field-label">Periode</label>
+          <input class="field-input" type="month" id="periode" value="2026-06">
         </div>
+        <div>
+          <label class="field-label">Nama Karyawan</label>
+          <input class="field-input" type="text" id="namaKaryawan" placeholder="Nama lengkap...">
+        </div>
+        <div>
+          <label class="field-label">Divisi</label>
+          <select class="field-select" id="divisi" onchange="onDivisiChange()"></select>
+        </div>
+        <div>
+          <label class="field-label">Sub-Posisi</label>
+          <select class="field-select" id="subPosisi" onchange="loadTemplate()"></select>
+        </div>
+      </div>
     </div>
+
+    <!-- KPI Rows -->
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between">
+        <span>🎯 Item KPI <span style="color:#6b7280;font-weight:500;font-size:12px">(bobot 75%)</span></span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="save-status" id="saveStatus" style="display:none"></span>
+          <button class="btn btn-sm btn-blue" onclick="tambahKPIRow()">+ Tambah Baris</button>
+        </div>
+      </div>
+      <div id="kpiRowsContainer"></div>
+      <div class="totals-bar" id="kpiTotalsBar" style="background:#15803d;color:#fff">
+        <span>Total Bobot: <strong id="totalBobotKPI">0%</strong></span>
+        <span>Total Nilai KPI: <strong id="totalNilaiKPI">0</strong></span>
+      </div>
+    </div>
+
+    <!-- Kompetensi -->
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between">
+        <span>🧠 Kompetensi Perilaku <span style="color:#6b7280;font-weight:500;font-size:12px">(bobot 25%)</span></span>
+        <button class="btn btn-sm btn-purple" onclick="tambahKomRow()">+ Tambah Aspek</button>
+      </div>
+      <div id="komRowsContainer"></div>
+      <div class="totals-bar" id="komTotalsBar" style="background:#7c3aed;color:#fff">
+        <span>Total Bobot: <strong id="totalBobotKom">0%</strong></span>
+        <span>Total Nilai Kompetensi: <strong id="totalNilaiKom">0</strong></span>
+      </div>
+    </div>
+
+    <!-- Nilai Akhir -->
+    <div class="nilai-box" id="nilaiAkhirBox" style="background:#16a34a">
+      <div class="nilai-box-left">
+        <div class="nilai-box-eyebrow">Nilai Akhir Kinerja</div>
+        <div class="nilai-box-num" id="nilaiAkhirNum">0.0</div>
+        <div class="nilai-box-status" id="nilaiAkhirStatus">—</div>
+      </div>
+      <button class="btn btn-md btn-ghost" onclick="simpanPenilaian()" id="btnSimpan">💾 Simpan Penilaian</button>
+    </div>
+
+  </div><!-- /tab-input -->
+
+  <!-- ══ TAB: DASHBOARD ══ -->
+  <div class="tab-pane" id="tab-dashboard">
+    <div class="card">
+      <div class="card-title">🔍 Filter</div>
+      <div>
+        <label class="field-label">Sub-Posisi</label>
+        <select class="field-select" id="filterPosisi" onchange="renderDashboard()">
+          <option value="ALL">Semua Posisi</option>
+        </select>
+      </div>
+    </div>
+    <div id="arsipContainer"></div>
+  </div>
+
+  <!-- ══ TAB: ANALITIK ══ -->
+  <div class="tab-pane" id="tab-analitik">
+    <div class="card">
+      <div class="card-title">🎛️ Filter Analitik</div>
+      <div class="filter-bar">
+        <div>
+          <label class="field-label">Divisi</label>
+          <select class="field-select" id="filterDivisiAnalitik" onchange="renderAnalitik()">
+            <option value="ALL">Semua Divisi</option>
+          </select>
+        </div>
+        <div>
+          <label class="field-label">Periode</label>
+          <select class="field-select" id="filterPeriodeAnalitik" onchange="renderAnalitik()">
+            <option value="ALL">Semua Periode</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="card" id="chartCard" style="display:none">
+      <div class="card-title">📈 Rata-Rata Skor per Divisi</div>
+      <div class="chart-wrap"><canvas id="performaChart"></canvas></div>
+    </div>
+    <div id="analitikContainer"></div>
+  </div>
+
+  <!-- ══ TAB: STRUKTUR ══ -->
+  <div class="tab-pane" id="tab-struktur">
+    <!-- Divisi -->
+    <div class="card">
+      <div class="card-title">🏢 Kelola Divisi Utama</div>
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <input class="field-input" type="text" id="inputDivisiBaru" placeholder="Nama divisi baru..." style="flex:1"
+          onkeydown="if(event.key==='Enter') tambahDivisi()">
+        <button class="btn btn-sm btn-green" onclick="tambahDivisi()">+ Tambah</button>
+      </div>
+      <div style="display:flex;gap:8px">
+        <select class="field-select" id="selectHapusDivisi" style="flex:1"></select>
+        <button class="btn btn-sm btn-red" onclick="hapusDivisi()">Hapus</button>
+      </div>
+    </div>
+
+    <!-- Sub-Posisi -->
+    <div class="card">
+      <div class="card-title">👤 Kelola Sub-Posisi / Jabatan</div>
+      <div style="margin-bottom:10px">
+        <label class="field-label">Pilih Divisi</label>
+        <select class="field-select" id="manageDivisiCtx" onchange="renderManageSub()">
+          <option value="">-- Pilih Divisi --</option>
+        </select>
+      </div>
+      <div id="manageSub" style="display:none">
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <input class="field-input" type="text" id="inputSubBaru" placeholder="Nama sub-posisi baru..." style="flex:1"
+            onkeydown="if(event.key==='Enter') tambahSub()">
+          <button class="btn btn-sm btn-green" onclick="tambahSub()">+ Tambah</button>
+        </div>
+        <div style="display:flex;gap:8px">
+          <select class="field-select" id="selectHapusSub" style="flex:1"></select>
+          <button class="btn btn-sm btn-red" onclick="hapusSub()">Hapus</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Preview -->
+    <div class="card">
+      <div class="card-title">🗂️ Struktur Saat Ini</div>
+      <div id="previewStruktur"></div>
+    </div>
+  </div>
+
+</div><!-- /content -->
+
+<!-- MODAL: Detail Karyawan -->
+<div class="modal-overlay" id="modalDetail">
+  <div class="modal-box wide">
+    <div class="modal-header">
+      <span class="modal-header-title" id="modalDetailTitle">📋 Detail KPI Karyawan</span>
+      <button class="modal-close" onclick="tutupModal('modalDetail')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="detail-meta" id="detailMeta"></div>
+      <div id="detailKPIList"></div>
+    </div>
+  </div>
 </div>
 
-
-<!-- MODAL 2: DETAIL DATA HISTORI -->
-<div id="historyModal" class="modal">
-    <div class="modal-content">
-        <span class="close-btn" onclick="tutupHistoryModal()">&times;</span>
-        <h2 style="background-color: #2980b9;" id="historyModalTitle">📋 HISTORI DETAIL KPI KARYAWAN</h2>
-        <div style="background: #f4fbf7; padding: 12px; margin-bottom: 15px; border-radius: 4px; border: 1px solid #d4efdf;">
-            <p style="margin: 4px 0;"><strong>Nama Karyawan:</strong> <span id="hModalNama">-</span></p>
-            <p style="margin: 4px 0;"><strong>Jabatan / Periode:</strong> <span id="hModalJabatan">-</span></p>
-            <p style="margin: 4px 0;"><strong>Skor Akhir Gabungan:</strong> <span id="hModalSkor" style="font-weight: bold; color:#27ae60;">-</span></p>
-        </div>
-        <h3>Rincian Capaian Indikator Lapangan:</h3>
-        <table>
-            <thead>
-                <tr><th>Area</th><th>Nama Item KPI</th><th>Target</th><th>Realisasi</th><th>Capaian %</th><th>Status Capaian</th></tr>
-            </thead>
-            <tbody id="historyModalTableBody"></tbody>
-        </table>
+<!-- MODAL: Analisis AI -->
+<div class="modal-overlay" id="modalAI">
+  <div class="modal-box wide">
+    <div class="modal-header">
+      <span class="modal-header-title" id="modalAITitle">🤖 Analisis AI Divisi</span>
+      <button class="modal-close" onclick="tutupModal('modalAI')">×</button>
     </div>
+    <div class="modal-body" id="modalAIBody"></div>
+  </div>
 </div>
 
-
-<!-- MODAL 3: ANALYSIS AI -->
-<div id="aiModal" class="modal">
-    <div class="modal-content">
-        <span class="close-btn" onclick="tutupModal()">&times;</span>
-        <h2 style="background-color: #27ae60;" id="aiModalTitle">🔍 DETAIL STRATEGIS DIVISI</h2>
-        <table id="aiModalTable">
-            <thead>
-                <tr><th>Area</th><th>Item KPI Terdeteksi Masalah</th><th>Rata-Rata Capaian</th><th>Status Masalah</th></tr>
-            </thead>
-            <tbody id="aiModalTableBody"></tbody>
-        </table>
-        <div class="ai-recommendation">
-            <h4 style="margin-top: 0; color: #27ae60; font-size: 16px;">💡 REKOMENDASI INTERVENSI GREENCARE:</h4>
-            <p id="aiTextContent" style="line-height: 1.6; font-weight: 500; color: #2c3e50;">Menganalisis data...</p>
-        </div>
+<!-- MODAL: Konfirmasi -->
+<div class="modal-overlay" id="modalKonfirmasi">
+  <div class="modal-box">
+    <div class="modal-header" style="background:#f59e0b">
+      <span class="modal-header-title">⚠️ Konfirmasi</span>
+      <button class="modal-close" onclick="tutupModal('modalKonfirmasi')">×</button>
     </div>
+    <div class="modal-body">
+      <p id="konfirmasiMsg" style="font-size:14px;color:#374151;margin-bottom:16px;line-height:1.6"></p>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn-sm" style="background:#6b7280;color:#fff" onclick="tutupModal('modalKonfirmasi')">Batal</button>
+        <button class="btn btn-sm btn-red" id="konfirmasiOk">Ya, Lanjutkan</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
-// Database Struktur Utama — diisi dari Supabase saat onload
-let subPosisiDatabase = {
-    "HRD": ["Staff HRD", "Manager HRD"], 
-    "Marketing": ["Staff Sales"], 
-    "Finance": ["Staff Akuntansi"],
-    "Operasional": ["SPV", "Case Manager", "CS Admin", "Dokter", "Perawat", "Caregiver"]
-};
+// ─── SUPABASE SETUP ───────────────────────────────────────────────────────────
+const SUPABASE_URL = 'https://cwcxctmcdhahdfuiexel.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN3Y3hjdG1jZGhhaGRmdWlleGVsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1NTU5MjAsImV4cCI6MjA5NzEzMTkyMH0.L3Kelsl3tMur3HzkSZl36XqUq7-y39t6SQO3BcOLRhY';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const STRUKTUR_ID = '00000000-0000-0000-0000-000000000001';
+const TEMPLATE_ID = '00000000-0000-0000-0000-000000000002';
 
-// Database Master Template Item KPI & Kompetensi per Sub-Posisi — diisi dari Supabase saat onload
-let templateKPIPosisi = {
-    "Staff HRD": {
-        kpi: [
-            {area: "Internal Process", kpi: "Kecepatan Rekrutmen Karyawan", bobot: 50, logika: "max", target: 100, realisasi: 90, cara: "Data HR"},
-            {area: "Learning", kpi: "Ketepatan Jadwal Training Internal", bobot: 50, logika: "max", target: 100, realisasi: 95, cara: "Absensi"}
-        ],
-        kompetensi: [{nama: "Knowledge", bobot: 50, skor: 80}, {nama: "Attitude", bobot: 50, skor: 85}]
-    },
-    "Staff Sales": {
-        kpi: [
-            {area: "Financial", kpi: "Omset Penjualan Paket Homecare", bobot: 60, logika: "max", target: 100, realisasi: 85, cara: "Sistem Kasir"},
-            {area: "Customer", kpi: "Jumlah Akuisisi Pasien Baru", bobot: 40, logika: "max", target: 100, realisasi: 80, cara: "CRM Sales"}
-        ],
-        kompetensi: [{nama: "Communication", bobot: 60, skor: 90}, {nama: "Negotiation", bobot: 40, skor: 80}]
-    },
-    "Perawat": {
-        kpi: [
-            {area: "Customer", kpi: "Kepuasan Pasien Homecare", bobot: 40, logika: "max", target: 100, realisasi: 95, cara: "Kuesioner"},
-            {area: "Internal Process", kpi: "Kepatuhan SOP Medis & Sterilitas", bobot: 40, logika: "max", target: 100, realisasi: 100, cara: "Audit Klinis"},
-            {area: "Learning", kpi: "Logbook Kasus Harian", bobot: 20, logika: "max", target: 100, realisasi: 90, cara: "App Android"}
-        ],
-        kompetensi: [{nama: "Medical Skill", bobot: 40, skor: 85}, {nama: "Empathy", bobot: 30, skor: 90}, {nama: "Discipline", bobot: 30, skor: 85}]
-    }
+// ─── STATE ────────────────────────────────────────────────────────────────────
+let struktur = { HRD:['Staff HRD','Manager HRD'], Marketing:['Staff Sales'], Finance:['Staff Akuntansi'], Operasional:['SPV','Case Manager','CS Admin','Dokter','Perawat','Caregiver'] };
+let template = {
+  'Staff HRD':{ kpi:[{area:'Internal Process',kpi:'Kecepatan Rekrutmen Karyawan',bobot:50,logika:'max',target:100,realisasi:90,cara:'Data HR'},{area:'Learning',kpi:'Ketepatan Jadwal Training Internal',bobot:50,logika:'max',target:100,realisasi:95,cara:'Absensi'}], kompetensi:[{nama:'Knowledge',bobot:50,skor:80},{nama:'Attitude',bobot:50,skor:85}] },
+  'Perawat':{ kpi:[{area:'Customer',kpi:'Kepuasan Pasien Homecare',bobot:40,logika:'max',target:100,realisasi:95,cara:'Kuesioner'},{area:'Internal Process',kpi:'Kepatuhan SOP Medis & Sterilitas',bobot:40,logika:'max',target:100,realisasi:100,cara:'Audit Klinis'},{area:'Learning',kpi:'Logbook Kasus Harian',bobot:20,logika:'max',target:100,realisasi:90,cara:'App Android'}], kompetensi:[{nama:'Medical Skill',bobot:40,skor:85},{nama:'Empathy',bobot:30,skor:90},{nama:'Discipline',bobot:30,skor:85}] }
 };
-
-let rowCounter = 0;
-let komCounter = 0;
+let arsip = [];
+let kpiRows = [];
+let komRows = [];
+let rowId = 0;
 let myChart = null;
-let isLoadingTemplate = false;
+let saveTimer = null;
 
-// ======================== FUNGSI EKSPOR & IMPOR DATA (BACKUP / RESTORE) ========================
-async function eksporSeluruhData() {
-    let { data: strData } = await sb.from('struktur').select('data').eq('id', STRUKTUR_ID).single();
-    let { data: tplData } = await sb.from('template_kpi').select('data').eq('id', TEMPLATE_ID).single();
-    let { data: arsipRows } = await sb.from('arsip_nilai').select('*');
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+function capaian(logika, target, realisasi) {
+  if (logika === 'max') return target > 0 ? realisasi / target : 0;
+  return realisasi > 0 ? target / realisasi : 0;
+}
+function statusInfo(nilai) {
+  if (nilai >= 85) return { bg:'#16a34a', label:'Sangat Baik' };
+  if (nilai >= 75) return { bg:'#22c55e', label:'Baik' };
+  if (nilai >= 65) return { bg:'#eab308', label:'Cukup' };
+  return { bg:'#ef4444', label:'Perlu Perbaikan' };
+}
+function capBadgeInfo(persen) {
+  const n = parseFloat(persen) || 0;
+  if (n >= 100) return { color:'#16a34a', text:'✓ Tercapai' };
+  if (n >= 85)  return { color:'#eab308', text:'Waspada' };
+  return { color:'#ef4444', text:'✗ Di bawah Target' };
+}
+function badge(text, color) {
+  return `<span class="badge" style="background:${color}">${text}</span>`;
+}
+function konfirmasi(msg, cb) {
+  document.getElementById('konfirmasiMsg').textContent = msg;
+  const btn = document.getElementById('konfirmasiOk');
+  const clone = btn.cloneNode(true);
+  btn.replaceWith(clone);
+  clone.onclick = () => { tutupModal('modalKonfirmasi'); cb(); };
+  document.getElementById('modalKonfirmasi').classList.add('open');
+}
+function tutupModal(id) { document.getElementById(id).classList.remove('open'); }
 
-    let paketDataGreencare = {
-        subPosisiDb: strData ? strData.data : subPosisiDatabase,
-        templateKpiDb: tplData ? tplData.data : templateKPIPosisi,
-        arsipNilaiDb: (arsipRows || []).map(r => ({
-            id: r.id, periode: r.periode, nama: r.nama,
-            divisiUtama: r.divisi_utama, subPosisi: r.sub_posisi,
-            strukturLengkap: r.struktur_lengkap, nilaiKPI: r.nilai_kpi,
-            nilaiKomp: r.nilai_komp, nilaiAkhir: r.nilai_akhir,
-            status: r.status, rincianKPI: r.rincian_kpi
-        }))
-    };
-
-    let dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(paketDataGreencare, null, 2));
-    let downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute("href", dataStr);
-    downloadAnchor.setAttribute("download", "kpi_greencare_backup.json");
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    downloadAnchor.remove();
+// ─── TAB SWITCH ──────────────────────────────────────────────────────────────
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.toggle('active', p.id === 'tab-' + tab));
+  if (tab === 'dashboard') renderDashboard();
+  if (tab === 'analitik')  renderAnalitik();
+  if (tab === 'struktur')  renderStruktur();
 }
 
-function memicuInputFile() {
-    document.getElementById("fileImporSembunyi").click();
-}
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+window.onload = async function() {
+  const [{ data: sd }, { data: td }, { data: ad }] = await Promise.all([
+    sb.from('struktur').select('data').eq('id', STRUKTUR_ID).single(),
+    sb.from('template_kpi').select('data').eq('id', TEMPLATE_ID).single(),
+    sb.from('arsip_nilai').select('*').order('created_at', { ascending: false }),
+  ]);
+  if (sd?.data) struktur = sd.data;
+  if (td?.data) template = td.data;
+  arsip = ad || [];
+  renderDivisiDropdown();
+  const firstDiv = Object.keys(struktur)[0] || '';
+  const firstSub = firstDiv ? (struktur[firstDiv][0] || '') : '';
+  document.getElementById('divisi').value = firstDiv;
+  renderSubPosisiDropdown();
+  document.getElementById('subPosisi').value = firstSub;
+  loadTemplateFromState(firstSub);
+};
 
-function imporSeluruhData(event) {
-    let file = event.target.files[0];
-    if (!file) return;
-
-    let reader = new FileReader();
-    reader.onload = async function(e) {
-        try {
-            let dataHasilImport = JSON.parse(e.target.result);
-            
-            if (dataHasilImport.subPosisiDb && dataHasilImport.templateKpiDb && dataHasilImport.arsipNilaiDb) {
-                if (confirm("⚠️ PERINGATAN: Mengimpor data baru akan menimpa data yang ada di database. Lanjutkan?")) {
-                    
-                    // Simpan ke Supabase
-                    await sb.from('struktur').upsert({ id: STRUKTUR_ID, data: dataHasilImport.subPosisiDb });
-                    await sb.from('template_kpi').upsert({ id: TEMPLATE_ID, data: dataHasilImport.templateKpiDb });
-
-                    // Hapus arsip lama lalu insert baru
-                    await sb.from('arsip_nilai').delete().neq('id', '0');
-                    for (let item of dataHasilImport.arsipNilaiDb) {
-                        await sb.from('arsip_nilai').upsert({
-                            id: String(item.id), periode: item.periode, nama: item.nama,
-                            divisi_utama: item.divisiUtama, sub_posisi: item.subPosisi,
-                            struktur_lengkap: item.strukturLengkap, nilai_kpi: item.nilaiKPI,
-                            nilai_komp: item.nilaiKomp, nilai_akhir: parseFloat(item.nilaiAkhir) || 0,
-                            status: item.status, rincian_kpi: item.rincianKPI
-                        });
-                    }
-                    
-                    subPosisiDatabase = dataHasilImport.subPosisiDb;
-                    templateKPIPosisi = dataHasilImport.templateKpiDb;
-
-                    alert("🎉 Pemulihan Data Sukses! Semua template dan riwayat ter-update ke Supabase.");
-                    await renderSemuaDropdownJabatan();
-                    await tampilkanDashboard();
-                }
-            } else {
-                alert("Gagal mengimpor file. Format isi berkas backup tidak cocok!");
-            }
-        } catch (err) {
-            alert("Terjadi kesalahan: " + err.message);
-        }
-    };
-    reader.readAsText(file);
-    event.target.value = '';
-}
-
-async function simpanStrukturKeStorage() {
-    await sb.from('struktur').upsert({ id: STRUKTUR_ID, data: subPosisiDatabase });
-    await renderSemuaDropdownJabatan();
-}
-
-async function renderSemuaDropdownJabatan() {
-    let divSelect = document.getElementById("divisi");
-    let f1Select = document.getElementById("filterDash1Posisi");
-    let f2DivSelect = document.getElementById("filterDash2Divisi");
-    let mContext = document.getElementById("selectManageDivisiContext");
-    let mDelDiv = document.getElementById("selectHapusDivisi");
-
-    let activeDiv = divSelect.value || Object.keys(subPosisiDatabase)[0] || "";
-
-    divSelect.innerHTML = ""; mContext.innerHTML = ""; mDelDiv.innerHTML = "";
-    f1Select.innerHTML = `<option value="ALL">-- Tampilkan Semua Posisi --</option>`;
-    f2DivSelect.innerHTML = `<option value="ALL">-- Tampilkan Semua Divisi --</option>`;
-
-    Object.keys(subPosisiDatabase).forEach(div => {
-        divSelect.innerHTML += `<option value="${div}">${div}</option>`;
-        mContext.innerHTML += `<option value="${div}">${div}</option>`;
-        mDelDiv.innerHTML += `<option value="${div}">${div}</option>`;
-        f2DivSelect.innerHTML += `<option value="${div}">${div}</option>`;
-    });
-
-    if(activeDiv && subPosisiDatabase[activeDiv]) divSelect.value = activeDiv;
-
-    Object.keys(subPosisiDatabase).forEach(div => {
-        subPosisiDatabase[div].forEach(sub => {
-            f1Select.innerHTML += `<option value="${sub}">${div} - ${sub}</option>`;
-        });
-    });
-
-    renderSubPosisiDropdown();
-    await renderDropdownPeriodeFilter();
+// ─── DROPDOWN RENDERS ────────────────────────────────────────────────────────
+function renderDivisiDropdown() {
+  const divs = Object.keys(struktur);
+  ['divisi','selectHapusDivisi','manageDivisiCtx'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const prev = el.value;
+    if (id === 'manageDivisiCtx') {
+      el.innerHTML = `<option value="">-- Pilih Divisi --</option>` + divs.map(d => `<option value="${d}">${d}</option>`).join('');
+    } else {
+      el.innerHTML = divs.map(d => `<option value="${d}">${d}</option>`).join('');
+    }
+    if (prev && divs.includes(prev)) el.value = prev;
+  });
+  renderFilterDropdowns();
+  renderStruktur();
 }
 
 function renderSubPosisiDropdown() {
-    let div = document.getElementById("divisi").value;
-    let select = document.getElementById("subPosisi"); 
-    select.innerHTML = "";
-    if(div && subPosisiDatabase[div]) {
-        subPosisiDatabase[div].forEach(sub => { select.innerHTML += `<option value="${sub}">${sub}</option>`; });
-    }
-    muatTemplateBerdasarkanPosisi();
+  const div = document.getElementById('divisi').value;
+  const subs = struktur[div] || [];
+  document.getElementById('subPosisi').innerHTML = subs.map(s => `<option value="${s}">${s}</option>`).join('');
 }
 
-async function muatTemplateBerdasarkanPosisi() {
-    isLoadingTemplate = true;
-    let sub = document.getElementById("subPosisi").value;
-    if(!sub) { isLoadingTemplate = false; return; }
-
-    // Selalu fetch fresh dari Supabase supaya sync antar device
-    let { data: tplData } = await sb.from("template_kpi").select("data").eq("id", TEMPLATE_ID).single();
-    if (tplData && tplData.data) templateKPIPosisi = tplData.data;
-
-    let tbodyKPI = document.getElementById("kpiTableBody");
-    let tbodyKom = document.getElementById("kompetensiTableBody");
-    tbodyKPI.innerHTML = "";
-    tbodyKom.innerHTML = "";
-
-    if (!templateKPIPosisi[sub]) {
-        templateKPIPosisi[sub] = {
-            kpi: [{area: "General", kpi: "Item KPI Utama " + sub, bobot: 100, logika: "max", target: 100, realisasi: 100, cara: "Internal"}],
-            kompetensi: [{nama: "Kompetensi Umum", bobot: 100, skor: 80}]
-        };
-    }
-
-    templateKPIPosisi[sub].kpi.forEach(k => {
-        tbodyKPI.innerHTML += buatBarisHTML(k.area, k.kpi, k.bobot, k.logika, k.target, k.realisasi, k.cara);
-    });
-    renderTotalRow();
-
-    templateKPIPosisi[sub].kompetensi.forEach(c => {
-        tambahBarisKompetensiRaw(c.nama, c.bobot, c.skor);
-    });
-
-    isLoadingTemplate = false;
-    showSaveStatus();
-    hitungTotal();
+function renderFilterDropdowns() {
+  const allSubs = Object.values(struktur).flat();
+  const fp = document.getElementById('filterPosisi');
+  if (fp) fp.innerHTML = `<option value="ALL">Semua Posisi</option>` + allSubs.map(s => `<option value="${s}">${s}</option>`).join('');
+  const fd = document.getElementById('filterDivisiAnalitik');
+  if (fd) fd.innerHTML = `<option value="ALL">Semua Divisi</option>` + Object.keys(struktur).map(d => `<option value="${d}">${d}</option>`).join('');
+  const periodeSet = [...new Set(arsip.map(r => r.periode))].sort();
+  const fp2 = document.getElementById('filterPeriodeAnalitik');
+  if (fp2) fp2.innerHTML = `<option value="ALL">Semua Periode</option>` + periodeSet.map(p => `<option value="${p}">${p}</option>`).join('');
 }
 
-async function simpanTemplatePosisiOtomatis() {
-    if (isLoadingTemplate) return;
-
-    let sub = document.getElementById("subPosisi").value;
-    if(!sub) return;
-
-    let kpiSaved = [];
-    let rows = document.getElementsByClassName("kpi-data-row");
-    for (let row of rows) {
-        let id = row.id.split("_")[1];
-        kpiSaved.push({
-            area: document.getElementById(`area_${id}`).innerText,
-            kpi: document.getElementById(`kpiName_${id}`).innerText,
-            bobot: parseFloat(document.getElementById(`bobot_${id}`).value) || 0,
-            logika: document.getElementById(`logika_${id}`).value,
-            target: parseFloat(document.getElementById(`target_${id}`).value) || 0,
-            realisasi: parseFloat(document.getElementById(`realisasi_${id}`).value) || 0,
-            cara: document.getElementById(`caraUkur_${id}`).innerText
-        });
-    }
-
-    let komSaved = [];
-    let komRows = document.getElementsByClassName("kompetensi-data-row");
-    for (let row of komRows) {
-        let id = row.id.split("_")[1];
-        komSaved.push({
-            nama: document.getElementById(`komNama_${id}`).innerText,
-            bobot: parseFloat(document.getElementById(`komBobot_${id}`).value) || 0,
-            skor: parseFloat(document.getElementById(`komSkor_${id}`).value) || 0
-        });
-    }
-
-    templateKPIPosisi[sub] = { kpi: kpiSaved, kompetensi: komSaved };
-    await sb.from('template_kpi').upsert({ id: TEMPLATE_ID, data: templateKPIPosisi });
-    showSaveStatus();
+// ─── LOAD TEMPLATE ────────────────────────────────────────────────────────────
+async function loadTemplate() {
+  const sub = document.getElementById('subPosisi').value;
+  if (!sub) return;
+  const { data: td } = await sb.from('template_kpi').select('data').eq('id', TEMPLATE_ID).single();
+  if (td?.data) template = td.data;
+  loadTemplateFromState(sub);
 }
 
-function showSaveStatus() {
-    let statusSpan = document.getElementById("saveStatus");
-    statusSpan.innerText = "✓ Otomatis menyimpan komponen ke posisi aktif...";
-    statusSpan.style.color = "#d35400";
-    setTimeout(() => {
-        statusSpan.innerText = "✓ Semua perubahan komponen posisi tersimpan otomatis!";
-        statusSpan.style.color = "#27ae60";
-    }, 600);
+function loadTemplateFromState(sub) {
+  if (!sub) return;
+  let t = template[sub];
+  if (!t) {
+    t = { kpi:[{area:'General',kpi:`Item KPI ${sub}`,bobot:100,logika:'max',target:100,realisasi:100,cara:'Internal'}], kompetensi:[{nama:'Kompetensi Umum',bobot:100,skor:80}] };
+  }
+  kpiRows = t.kpi.map((k,i) => ({ ...k, id: i }));
+  komRows = t.kompetensi.map((k,i) => ({ ...k, id: i }));
+  rowId = kpiRows.length + komRows.length;
+  renderKPIRows();
+  renderKomRows();
+  hitungTotal();
 }
 
-function buatBarisHTML(area="", kpi="", bobot=25, logika="max", target=100, realisasi=100, cara="Internal Data") {
-    let id = rowCounter++;
-    return `
-        <tr id="kpiRow_${id}" class="kpi-data-row">
-            <td contenteditable="true" class="editable-cell" id="area_${id}" onblur="simpanTemplatePosisiOtomatis()">${area}</td>
-            <td contenteditable="true" class="editable-cell" id="kpiName_${id}" onblur="simpanTemplatePosisiOtomatis()">${kpi}</td>
-            <td><input type="number" id="bobot_${id}" value="${bobot}" oninput="hitungTotal(); simpanTemplatePosisiOtomatis()"></td>
-            <td>
-                <select id="logika_${id}" onchange="hitungTotal(); simpanTemplatePosisiOtomatis()">
-                    <option value="max" ${logika==='max'?'selected':''}>≥ (Besar)</option>
-                    <option value="min" ${logika==='min'?'selected':''}>≤ (Kecil)</option>
-                </select>
-            </td>
-            <td><input type="number" id="target_${id}" value="${target}" oninput="hitungTotal(); simpanTemplatePosisiOtomatis()"></td>
-            <td><input type="number" id="realisasi_${id}" value="${realisasi}" oninput="hitungTotal(); simpanTemplatePosisiOtomatis()"></td>
-            <td id="capaian_${id}" style="font-weight:bold;">0%</td>
-            <td id="nilai_${id}" style="font-weight:bold;">0</td>
-            <td contenteditable="true" class="editable-cell" id="caraUkur_${id}" onblur="simpanTemplatePosisiOtomatis()">${cara}</td>
-            <td><button class="btn btn-danger btn-sm" onclick="hapusBarisKPI(${id})">X</button></td>
-        </tr>`;
+function onDivisiChange() {
+  renderSubPosisiDropdown();
+  loadTemplate();
 }
 
-function tambahBarisKompetensi(nama="Aspek Baru", bobot=20, skor=80) {
-    tambahBarisKompetensiRaw(nama, bobot, skor);
-    simpanTemplatePosisiOtomatis();
+// ─── KPI ROWS RENDER ──────────────────────────────────────────────────────────
+function renderKPIRows() {
+  const c = document.getElementById('kpiRowsContainer');
+  c.innerHTML = '';
+  kpiRows.forEach((row, idx) => {
+    const cap = capaian(row.logika, row.target, row.realisasi);
+    const nilai = cap * row.bobot;
+    const div = document.createElement('div');
+    div.className = 'kpi-card';
+    div.style.marginBottom = '8px';
+    div.innerHTML = `
+      <div class="kpi-card-header">
+        <span class="kpi-card-num">#${idx+1}</span>
+        <button class="kpi-card-del" onclick="hapusKPIRow(${row.id})">Hapus</button>
+      </div>
+      <div class="kpi-grid-2">
+        <div><label class="field-label">Area</label>
+          <input class="field-input" value="${row.area}" oninput="updateKPI(${row.id},'area',this.value)"></div>
+        <div><label class="field-label">Bobot (%)</label>
+          <input class="field-input" type="number" value="${row.bobot}" oninput="updateKPI(${row.id},'bobot',+this.value)"></div>
+      </div>
+      <div style="margin-bottom:8px"><label class="field-label">Nama KPI</label>
+        <input class="field-input" value="${row.kpi}" oninput="updateKPI(${row.id},'kpi',this.value)"></div>
+      <div class="kpi-grid-3">
+        <div><label class="field-label">Logika</label>
+          <select class="field-select" onchange="updateKPI(${row.id},'logika',this.value)">
+            <option value="max" ${row.logika==='max'?'selected':''}>≥ Besar</option>
+            <option value="min" ${row.logika==='min'?'selected':''}>≤ Kecil</option>
+          </select></div>
+        <div><label class="field-label">Target</label>
+          <input class="field-input" type="number" value="${row.target}" oninput="updateKPI(${row.id},'target',+this.value)"></div>
+        <div><label class="field-label">Realisasi</label>
+          <input class="field-input" type="number" value="${row.realisasi}" oninput="updateKPI(${row.id},'realisasi',+this.value)"></div>
+      </div>
+      <div style="margin-bottom:8px"><label class="field-label">Cara Ukur</label>
+        <input class="field-input" value="${row.cara}" oninput="updateKPI(${row.id},'cara',this.value)"></div>
+      <div class="kpi-stats-row">
+        <div class="kpi-stat" style="background:#dcfce7">
+          <div class="kpi-stat-label" style="color:#166534">Capaian</div>
+          <div class="kpi-stat-val" style="color:#16a34a">${(cap*100).toFixed(1)}%</div>
+        </div>
+        <div class="kpi-stat" style="background:#dbeafe">
+          <div class="kpi-stat-label" style="color:#1e40af">Nilai KPI</div>
+          <div class="kpi-stat-val" style="color:#2563eb">${nilai.toFixed(1)}</div>
+        </div>
+      </div>`;
+    c.appendChild(div);
+  });
 }
 
-function tambahBarisKompetensiRaw(nama="Aspek Baru", bobot=20, skor=80) {
-    let id = komCounter++;
-    let tbody = document.getElementById("kompetensiTableBody");
-    let tr = document.createElement("tr");
-    tr.id = `komRow_${id}`;
-    tr.className = "kompetensi-data-row";
-    tr.innerHTML = `
-        <td contenteditable="true" class="editable-cell" id="komNama_${id}" onblur="simpanTemplatePosisiOtomatis()">${nama}</td>
-        <td><input type="number" id="komBobot_${id}" value="${bobot}" oninput="hitungTotal(); simpanTemplatePosisiOtomatis()"></td>
-        <td><input type="number" id="komSkor_${id}" value="${skor}" oninput="hitungTotal(); simpanTemplatePosisiOtomatis()"></td>
-        <td><button class="btn btn-danger btn-sm" onclick="hapusBarisKompetensi(${id})">X</button></td>
-    `;
-    tbody.appendChild(tr);
-    hitungTotal();
+function renderKomRows() {
+  const c = document.getElementById('komRowsContainer');
+  c.innerHTML = '';
+  komRows.forEach((row, idx) => {
+    const div = document.createElement('div');
+    div.className = 'kom-card';
+    div.style.marginBottom = '8px';
+    div.innerHTML = `
+      <div class="kpi-card-header">
+        <span class="kpi-card-num" style="color:#7c3aed">#${idx+1}</span>
+        <button class="kpi-card-del" onclick="hapusKomRow(${row.id})">Hapus</button>
+      </div>
+      <div class="kom-grid">
+        <div><label class="field-label">Nama Kompetensi</label>
+          <input class="field-input" value="${row.nama}" oninput="updateKom(${row.id},'nama',this.value)"></div>
+        <div><label class="field-label">Bobot (%)</label>
+          <input class="field-input" type="number" value="${row.bobot}" oninput="updateKom(${row.id},'bobot',+this.value)"></div>
+        <div><label class="field-label">Skor (1-100)</label>
+          <input class="field-input" type="number" value="${row.skor}" oninput="updateKom(${row.id},'skor',+this.value)"></div>
+      </div>`;
+    c.appendChild(div);
+  });
 }
 
-function hapusBarisKompetensi(id) {
-    let row = document.getElementById(`komRow_${id}`);
-    if(row) { row.remove(); hitungTotal(); simpanTemplatePosisiOtomatis(); }
+// ─── ROW OPERATIONS ───────────────────────────────────────────────────────────
+function updateKPI(id, field, val) {
+  kpiRows = kpiRows.map(r => r.id === id ? { ...r, [field]: val } : r);
+  hitungTotal();
+  scheduleAutoSave();
+}
+function updateKom(id, field, val) {
+  komRows = komRows.map(r => r.id === id ? { ...r, [field]: val } : r);
+  hitungTotal();
+  scheduleAutoSave();
+}
+function tambahKPIRow() {
+  kpiRows.push({ id: rowId++, area:'Custom', kpi:'Item Baru', bobot:20, logika:'max', target:100, realisasi:100, cara:'Sistem' });
+  renderKPIRows(); hitungTotal(); scheduleAutoSave();
+}
+function hapusKPIRow(id) {
+  kpiRows = kpiRows.filter(r => r.id !== id);
+  renderKPIRows(); hitungTotal(); scheduleAutoSave();
+}
+function tambahKomRow() {
+  komRows.push({ id: rowId++, nama:'Aspek Baru', bobot:20, skor:80 });
+  renderKomRows(); hitungTotal(); scheduleAutoSave();
+}
+function hapusKomRow(id) {
+  komRows = komRows.filter(r => r.id !== id);
+  renderKomRows(); hitungTotal(); scheduleAutoSave();
 }
 
-function renderTotalRow() {
-    let oldTotal = document.getElementById("totalRowKPI"); if(oldTotal) oldTotal.remove();
-    document.getElementById("kpiTableBody").innerHTML += `
-        <tr id="totalRowKPI" class="total-row">
-            <td colspan="2" style="text-align: right;">TOTAL BOBOT KPI:</td><td id="totalBobotKPI">0</td>
-            <td colspan="4" style="text-align: right;">TOTAL NILAI KPI:</td><td id="totalNilaiKPI" style="text-align: left;">0</td><td colspan="2"></td>
-        </tr>`;
-}
-
-function tambahBarisKPIDinamis() {
-    let oldTotal = document.getElementById("totalRowKPI"); if(oldTotal) oldTotal.remove();
-    document.getElementById("kpiTableBody").innerHTML += buatBarisHTML("Custom", "Item Baru", 20, "max", 100, 100, "Sistem");
-    renderTotalRow(); 
-    hitungTotal();
-    simpanTemplatePosisiOtomatis();
-}
-
-function hapusBarisKPI(id) { 
-    let row = document.getElementById(`kpiRow_${id}`); 
-    if(row) { row.remove(); hitungTotal(); simpanTemplatePosisiOtomatis(); } 
-}
-
+// ─── KALKULASI ────────────────────────────────────────────────────────────────
 function hitungTotal() {
-    let rows = document.getElementsByClassName("kpi-data-row");
-    let totalBobot = 0, totalNilaiKPI = 0;
+  const totalNilaiKPI = kpiRows.reduce((s, r) => s + capaian(r.logika, r.target, r.realisasi) * r.bobot, 0);
+  const totalBobotKPI = kpiRows.reduce((s, r) => s + (r.bobot || 0), 0);
+  const totalNilaiKom = komRows.reduce((s, r) => s + r.skor * (r.bobot / 100), 0);
+  const totalBobotKom = komRows.reduce((s, r) => s + (r.bobot || 0), 0);
+  const nilaiAkhir    = totalNilaiKPI * 0.75 + totalNilaiKom * 0.25;
+  const st            = statusInfo(nilaiAkhir);
 
-    for (let row of rows) {
-        let id = row.id.split("_")[1];
-        let bobotEl = document.getElementById(`bobot_${id}`);
-        if (!bobotEl) continue;
+  document.getElementById('totalBobotKPI').textContent = totalBobotKPI + '%';
+  document.getElementById('totalNilaiKPI').textContent = totalNilaiKPI.toFixed(1);
+  document.getElementById('totalBobotKom').textContent = totalBobotKom + '%';
+  document.getElementById('totalNilaiKom').textContent = totalNilaiKom.toFixed(1);
+  document.getElementById('nilaiAkhirNum').textContent = nilaiAkhir.toFixed(1);
+  document.getElementById('nilaiAkhirStatus').textContent = st.label;
+  document.getElementById('nilaiAkhirBox').style.background = st.bg;
 
-        let bobot = parseFloat(bobotEl.value) || 0;
-        let target = parseFloat(document.getElementById(`target_${id}`).value) || 0;
-        let realisasi = parseFloat(document.getElementById(`realisasi_${id}`).value) || 0;
-        let logika = document.getElementById(`logika_${id}`).value;
-
-        totalBobot += bobot;
-        let capaian = 0;
-        if(logika === "max") { capaian = target > 0 ? (realisasi / target) : 0; } 
-        else if(logika === "min") { capaian = realisasi > 0 ? (target / realisasi) : 0; }
-        
-        let hasilNilaiBaris = capaian * bobot;
-        totalNilaiKPI += hasilNilaiBaris;
-
-        document.getElementById(`capaian_${id}`).innerText = (capaian * 100).toFixed(1) + "%";
-        document.getElementById(`nilai_${id}`).innerText = hasilNilaiBaris.toFixed(1);
-    }
-    let tBobotEl = document.getElementById("totalBobotKPI");
-    let tNilaiEl = document.getElementById("totalNilaiKPI");
-    if(tBobotEl) tBobotEl.innerText = totalBobot + "%";
-    if(tNilaiEl) tNilaiEl.innerText = totalNilaiKPI.toFixed(1);
-
-    let komRows = document.getElementsByClassName("kompetensi-data-row");
-    let totalBobotKom = 0, totalNilaiKompetensi = 0;
-
-    for(let row of komRows) {
-        let id = row.id.split("_")[1];
-        let bKom = parseFloat(document.getElementById(`komBobot_${id}`).value) || 0;
-        let sKom = parseFloat(document.getElementById(`komSkor_${id}`).value) || 0;
-
-        totalBobotKom += bKom;
-        totalNilaiKompetensi += (sKom * (bKom / 100));
-    }
-    document.getElementById("totalBobotKompetensi").innerText = totalBobotKom + "%";
-    document.getElementById("totalNilaiKompetensi").innerText = totalNilaiKompetensi.toFixed(1);
-
-    let nilaiAkhir = (totalNilaiKPI * 0.75) + (totalNilaiKompetensi * 0.25);
-    document.getElementById("nilaiAkhirFinal").innerText = nilaiAkhir.toFixed(1);
-
-    let status = "Perlu Perbaikan"; let color = "#e74c3c";
-    if(nilaiAkhir >= 85) { status = "Sangat Baik"; color = "#27ae60"; }
-    else if(nilaiAkhir >= 75) { status = "Baik"; color = "#2ecc71"; }
-    else if(nilaiAkhir >= 65) { status = "Cukup"; color = "#f1c40f"; }
-    document.getElementById("statusFinal").innerText = status; document.getElementById("finalBox").style.backgroundColor = color;
+  // Update capaian labels in kpi cards without full re-render
+  kpiRows.forEach(r => {
+    const cap = capaian(r.logika, r.target, r.realisasi);
+    const nilai = cap * r.bobot;
+    // find stat vals — safer to just re-render small piece
+  });
+  renderKPIRows(); // re-render to update capaian badges
 }
 
-async function simpanKeDatabase() {
-    let div = document.getElementById("divisi").value;
-    let sub = document.getElementById("subPosisi").value;
-    
-    let itemsKPISaved = [];
-    let rows = document.getElementsByClassName("kpi-data-row");
-    for(let row of rows) {
-        let id = row.id.split("_")[1];
-        itemsKPISaved.push({
-            area: document.getElementById(`area_${id}`).innerText,
-            kpi: document.getElementById(`kpiName_${id}`).innerText,
-            target: document.getElementById(`target_${id}`).value,
-            realisasi: document.getElementById(`realisasi_${id}`).value,
-            capaian: document.getElementById(`capaian_${id}`).innerText
-        });
-    }
+// ─── AUTO SAVE ────────────────────────────────────────────────────────────────
+function scheduleAutoSave() {
+  const ss = document.getElementById('saveStatus');
+  ss.style.display = 'inline';
+  ss.className = 'save-status save-saving';
+  ss.textContent = '⏳ Menyimpan...';
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(doAutoSave, 700);
+}
 
-    let entryId = String(Date.now());
-    let { error } = await sb.from('arsip_nilai').insert({
-        id: entryId,
-        periode: document.getElementById("periode").value,
-        nama: document.getElementById("namaKaryawan").value,
-        divisi_utama: div,
-        sub_posisi: sub,
-        struktur_lengkap: `${div} - ${sub}`,
-        nilai_kpi: document.getElementById("totalNilaiKPI").innerText,
-        nilai_komp: document.getElementById("totalNilaiKompetensi").innerText,
-        nilai_akhir: parseFloat(document.getElementById("nilaiAkhirFinal").innerText) || 0,
-        status: document.getElementById("statusFinal").innerText,
-        rincian_kpi: itemsKPISaved
+async function doAutoSave() {
+  const sub = document.getElementById('subPosisi').value;
+  if (!sub) return;
+  const newTpl = { ...template, [sub]: { kpi: kpiRows.map(({id,...r})=>r), kompetensi: komRows.map(({id,...k})=>k) } };
+  template = newTpl;
+  await sb.from('template_kpi').upsert({ id: TEMPLATE_ID, data: newTpl });
+  const ss = document.getElementById('saveStatus');
+  ss.className = 'save-status save-saved';
+  ss.textContent = '✓ Tersimpan';
+  setTimeout(() => { ss.style.display = 'none'; }, 2000);
+}
+
+// ─── SIMPAN PENILAIAN ─────────────────────────────────────────────────────────
+async function simpanPenilaian() {
+  const nama = document.getElementById('namaKaryawan').value.trim();
+  const sub  = document.getElementById('subPosisi').value;
+  if (!nama) { alert('Isi nama karyawan terlebih dahulu!'); return; }
+  if (!sub)  { alert('Pilih sub-posisi terlebih dahulu!'); return; }
+
+  const div      = document.getElementById('divisi').value;
+  const periode  = document.getElementById('periode').value;
+  const totalNilaiKPI = kpiRows.reduce((s, r) => s + capaian(r.logika, r.target, r.realisasi) * r.bobot, 0);
+  const totalNilaiKom = komRows.reduce((s, r) => s + r.skor * (r.bobot / 100), 0);
+  const nilaiAkhir    = totalNilaiKPI * 0.75 + totalNilaiKom * 0.25;
+  const st            = statusInfo(nilaiAkhir);
+  const rincian = kpiRows.map(r => {
+    const c = capaian(r.logika, r.target, r.realisasi);
+    return { area: r.area, kpi: r.kpi, target: r.target, realisasi: r.realisasi, capaian: (c * 100).toFixed(1) + '%' };
+  });
+
+  const { error } = await sb.from('arsip_nilai').insert({
+    id: String(Date.now()), periode, nama,
+    divisi_utama: div, sub_posisi: sub,
+    struktur_lengkap: `${div} - ${sub}`,
+    nilai_kpi: totalNilaiKPI.toFixed(1),
+    nilai_komp: totalNilaiKom.toFixed(1),
+    nilai_akhir: parseFloat(nilaiAkhir.toFixed(1)),
+    status: st.label,
+    rincian_kpi: rincian,
+  });
+  if (error) { alert('Gagal menyimpan: ' + error.message); return; }
+  const { data } = await sb.from('arsip_nilai').select('*').order('created_at', { ascending: false });
+  arsip = data || [];
+  renderFilterDropdowns();
+  alert('✅ Penilaian berhasil disimpan!');
+  switchTab('dashboard');
+}
+
+// ─── DASHBOARD ────────────────────────────────────────────────────────────────
+function renderDashboard() {
+  const fp = document.getElementById('filterPosisi').value;
+  const filtered = arsip.filter(r => fp === 'ALL' || r.sub_posisi === fp);
+  const c = document.getElementById('arsipContainer');
+  if (filtered.length === 0) {
+    c.innerHTML = `<div class="empty-state card">
+      <div class="empty-icon">📭</div>
+      <div class="empty-title">Belum ada data penilaian</div>
+      <div class="empty-sub">Simpan penilaian pertama dari tab Input KPI</div>
+    </div>`; return;
+  }
+  c.innerHTML = filtered.map(r => {
+    const st = statusInfo(parseFloat(r.nilai_akhir) || 0);
+    return `<div class="arsip-card" style="border-left-color:${st.bg};margin-bottom:10px">
+      <div class="arsip-card-top">
+        <div>
+          <div class="arsip-card-name">${r.nama}</div>
+          <div class="arsip-card-sub">${r.struktur_lengkap} · ${r.periode}</div>
+        </div>
+        <div style="text-align:right">
+          <div class="arsip-card-score" style="color:${st.bg}">${r.nilai_akhir}</div>
+          ${badge(r.status, st.bg)}
+        </div>
+      </div>
+      <div class="arsip-mini-stats">
+        <div class="arsip-mini-stat" style="background:#f0fdf4">
+          <div style="font-size:10px;color:#15803d;font-weight:600;text-transform:uppercase">KPI</div>
+          <div style="font-weight:700;color:#16a34a;font-size:15px">${r.nilai_kpi}</div>
+        </div>
+        <div class="arsip-mini-stat" style="background:#faf5ff">
+          <div style="font-size:10px;color:#7c3aed;font-weight:600;text-transform:uppercase">Kompetensi</div>
+          <div style="font-weight:700;color:#7c3aed;font-size:15px">${r.nilai_komp}</div>
+        </div>
+      </div>
+      <div class="arsip-actions">
+        <button class="btn btn-sm btn-blue" onclick="bukaDetail('${r.id}')">🔍 Rincian KPI</button>
+        <button class="btn btn-sm btn-red" onclick="hapusArsip('${r.id}')">Hapus</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function hapusArsip(id) {
+  konfirmasi('Hapus data penilaian ini secara permanen?', async () => {
+    await sb.from('arsip_nilai').delete().eq('id', String(id));
+    arsip = arsip.filter(r => r.id !== String(id));
+    renderDashboard();
+    renderFilterDropdowns();
+  });
+}
+
+async function bukaDetail(id) {
+  const { data: row } = await sb.from('arsip_nilai').select('*').eq('id', String(id)).single();
+  if (!row) return;
+  const st = statusInfo(parseFloat(row.nilai_akhir) || 0);
+  document.getElementById('modalDetailTitle').textContent = `📋 Detail KPI — ${row.nama}`;
+  document.getElementById('detailMeta').innerHTML = `
+    <div class="detail-meta-item" style="background:#f0fdf4">
+      <div class="detail-meta-eyebrow" style="color:#16a34a">Jabatan</div>
+      <div class="detail-meta-val">${row.struktur_lengkap}</div>
+    </div>
+    <div class="detail-meta-item" style="background:#f0fdf4">
+      <div class="detail-meta-eyebrow" style="color:#16a34a">Periode</div>
+      <div class="detail-meta-val">${row.periode}</div>
+    </div>
+    <div class="detail-meta-item" style="background:${st.bg}">
+      <div class="detail-meta-eyebrow" style="color:rgba(255,255,255,.8)">Nilai Akhir</div>
+      <div class="detail-meta-val" style="color:#fff;font-size:18px;font-weight:900">${row.nilai_akhir}</div>
+    </div>`;
+  document.getElementById('detailKPIList').innerHTML = (row.rincian_kpi || []).map(k => {
+    const b = capBadgeInfo(k.capaian);
+    return `<div class="detail-kpi-item" style="border-left-color:${b.color}">
+      <div class="detail-kpi-top">
+        <div>
+          <div class="detail-kpi-name">${k.kpi}</div>
+          <div class="detail-kpi-area">${k.area}</div>
+        </div>
+        ${badge(b.text, b.color)}
+      </div>
+      <div class="detail-kpi-stats">
+        <span class="detail-kpi-stat">Target: <strong>${k.target}</strong></span>
+        <span class="detail-kpi-stat">Realisasi: <strong>${k.realisasi}</strong></span>
+        <span class="detail-kpi-stat" style="color:${b.color};font-weight:700">Capaian: ${k.capaian}</span>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('modalDetail').classList.add('open');
+}
+
+// ─── ANALITIK ─────────────────────────────────────────────────────────────────
+function renderAnalitik() {
+  const fd = document.getElementById('filterDivisiAnalitik').value;
+  const fp = document.getElementById('filterPeriodeAnalitik').value;
+
+  const grouped = {};
+  arsip.forEach(r => {
+    if (fd !== 'ALL' && r.divisi_utama !== fd) return;
+    if (fp !== 'ALL' && r.periode !== fp) return;
+    if (!grouped[r.divisi_utama]) grouped[r.divisi_utama] = { total:0, sum:0 };
+    grouped[r.divisi_utama].total++;
+    grouped[r.divisi_utama].sum += parseFloat(r.nilai_akhir) || 0;
+  });
+
+  const entries = Object.entries(grouped);
+  const chartCard = document.getElementById('chartCard');
+
+  if (entries.length > 0) {
+    chartCard.style.display = 'block';
+    const labels = entries.map(([k]) => k);
+    const data   = entries.map(([,v]) => parseFloat((v.sum/v.total).toFixed(1)));
+    const colors = data.map(d => statusInfo(d).bg);
+    if (myChart) myChart.destroy();
+    myChart = new Chart(document.getElementById('performaChart').getContext('2d'), {
+      type: 'bar',
+      data: { labels, datasets: [{ label:'Rata-rata Skor', data, backgroundColor: colors, borderRadius: 6 }] },
+      options: { responsive:true, maintainAspectRatio:false,
+        scales: { y:{ beginAtZero:true, max:100, grid:{ color:'#d1fae5' }, ticks:{ font:{size:11}, color:'#6b7280' } }, x:{ ticks:{ font:{size:11}, color:'#6b7280' } } },
+        plugins: { legend:{ display:false }, tooltip:{ callbacks:{ label: ctx => ` ${ctx.parsed.y} / 100` } } }
+      }
     });
+  } else {
+    chartCard.style.display = 'none';
+    if (myChart) { myChart.destroy(); myChart = null; }
+  }
 
-    if (error) {
-        alert("Gagal menyimpan: " + error.message);
-    } else {
-        alert("Data Greencare berhasil disimpan ke Supabase!");
-        await tampilkanDashboard();
-    }
+  const c = document.getElementById('analitikContainer');
+  if (entries.length === 0) {
+    c.innerHTML = `<div class="empty-state card"><div class="empty-icon">📊</div><div class="empty-title">Belum ada data untuk dianalisis</div></div>`;
+    return;
+  }
+  c.innerHTML = entries.map(([nama, data]) => {
+    const rata = data.sum / data.total;
+    const st = statusInfo(rata);
+    return `<div class="analitik-card" style="border-left-color:${st.bg};margin-bottom:10px">
+      <div class="analitik-top">
+        <div>
+          <div style="font-weight:700;font-size:15px">${nama}</div>
+          <div style="font-size:12px;color:#6b7280">${data.total} karyawan dinilai</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-weight:900;font-size:26px;color:${st.bg}">${rata.toFixed(1)}</div>
+          ${badge(rata >= 75 ? '✓ AMAN' : '✗ DIEVALUASI', st.bg)}
+        </div>
+      </div>
+      <button class="btn btn-sm btn-cyan" onclick="bukaAI('${nama}')">🔍 Lihat Analisis AI</button>
+    </div>`;
+  }).join('');
 }
 
-async function tampilkanDashboard() {
-    let { data: arsipRows } = await sb.from('arsip_nilai').select('*').order('created_at', { ascending: false });
-    let database = (arsipRows || []).map(r => ({
-        id: r.id, periode: r.periode, nama: r.nama,
-        divisiUtama: r.divisi_utama, subPosisi: r.sub_posisi,
-        strukturLengkap: r.struktur_lengkap, nilaiKPI: r.nilai_kpi,
-        nilaiKomp: r.nilai_komp, nilaiAkhir: r.nilai_akhir,
-        status: r.status, rincianKPI: r.rincian_kpi
-    }));
-
-    let tbody = document.getElementById("dashboardTableBody"); tbody.innerHTML = "";
-    let filterPosisi = document.getElementById("filterDash1Posisi").value;
-
-    database.forEach(item => {
-        if(filterPosisi !== "ALL" && item.subPosisi !== filterPosisi) return;
-
-        let bColor = item.status === "Sangat Baik" ? "#27ae60" : (item.status === "Baik" ? "#2ecc71" : (item.status === "Cukup" ? "#f1c40f" : "#e74c3c"));
-        tbody.innerHTML += `
-            <tr>
-                <td>${item.periode}</td><td><strong>${item.nama}</strong></td><td><small>${item.strukturLengkap}</small></td>
-                <td>${item.nilaiKPI}</td><td>${item.nilaiKomp}</td><td><strong>${item.nilaiAkhir}</strong></td>
-                <td><span class="badge" style="background-color:${bColor}">${item.status}</span></td>
-                <td>
-                    <button class="btn btn-sm btn-orange" onclick="bukaDetailKaryawan('${item.id}')">🔍 Lihat Rincian KPI</button>
-                    <button class="btn btn-danger btn-sm" onclick="hapusArsip('${item.id}')">Hapus</button>
-                </td>
-            </tr>`;
-    });
-    analisisDivisiDanRenderChart(database);
+async function bukaAI(namaDivisi) {
+  const { data: rows } = await sb.from('arsip_nilai').select('divisi_utama,rincian_kpi').eq('divisi_utama', namaDivisi);
+  const allKPI = (rows || []).flatMap(r => r.rincian_kpi || []);
+  const summary = {};
+  allKPI.forEach(k => {
+    if (!summary[k.kpi]) summary[k.kpi] = { area:k.area, nama:k.kpi, total:0, count:0 };
+    summary[k.kpi].total += parseFloat(k.capaian) || 0;
+    summary[k.kpi].count++;
+  });
+  const sorted = Object.values(summary).map(s => ({ ...s, avg: s.total/s.count })).sort((a,b) => a.avg-b.avg);
+  const top3 = sorted.slice(0, 3);
+  document.getElementById('modalAITitle').textContent = `🤖 Analisis AI — ${namaDivisi}`;
+  document.getElementById('modalAIBody').innerHTML = `
+    <p style="font-size:13px;font-weight:600;color:#374151;margin-bottom:10px">3 KPI dengan rata-rata capaian terendah:</p>
+    ${top3.map(item => `
+      <div class="ai-item">
+        <div>
+          <div style="font-weight:700;font-size:13px">${item.nama}</div>
+          <div style="font-size:11px;color:#6b7280">${item.area}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-weight:900;font-size:18px;color:#ef4444">${item.avg.toFixed(1)}%</div>
+          ${badge(item.avg < 85 ? 'Kritis' : 'Optimasi', item.avg < 85 ? '#ef4444' : '#f59e0b')}
+        </div>
+      </div>`).join('')}
+    <div class="ai-rekom">
+      <div class="ai-rekom-title">💡 Rekomendasi Intervensi Greencare</div>
+      <div class="ai-rekom-text">Area bottleneck utama Divisi <strong>${namaDivisi}</strong> terdeteksi pada <strong>"${top3[0]?.nama || '—'}"</strong> dengan rata-rata capaian <strong>${top3[0]?.avg.toFixed(1) || 0}%</strong>.</div>
+      <ol>
+        <li>Lakukan audit workflow cross-functional untuk divisi ini.</li>
+        <li>Sesuaikan bobot penalti logika jika instrumen ukur lapangan terlalu ketat.</li>
+        <li>Standarisasi ulang target bulanan menyesuaikan kondisi riil kapasitas tim.</li>
+      </ol>
+    </div>`;
+  document.getElementById('modalAI').classList.add('open');
 }
 
-function analisisDivisiDanRenderChart(database) {
-    if (!database) database = [];
-    let tbody = document.getElementById("posisiAnalyticsTableBody");
-    tbody.innerHTML = "";
+// ─── STRUKTUR ─────────────────────────────────────────────────────────────────
+function renderStruktur() {
+  renderDivisiDropdown();
+  renderManageSub();
+  const c = document.getElementById('previewStruktur');
+  c.innerHTML = Object.entries(struktur).map(([div, subs]) => `
+    <div style="margin-bottom:10px">
+      <div style="font-weight:700;color:#374151;font-size:13px;margin-bottom:4px">📁 ${div}</div>
+      <div style="padding-left:12px">
+        ${subs.length === 0
+          ? `<span style="color:#9ca3af;font-size:12px">Belum ada sub-posisi</span>`
+          : subs.map(s => `<span class="div-chip">${s}</span>`).join('')}
+      </div>
+    </div>`).join('');
+}
 
-    let fDivisi = document.getElementById("filterDash2Divisi").value;
-    let fPeriode = document.getElementById("filterDash2Periode").value;
+function renderManageSub() {
+  const div = document.getElementById('manageDivisiCtx').value;
+  const wrap = document.getElementById('manageSub');
+  if (!div) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+  const subs = struktur[div] || [];
+  document.getElementById('selectHapusSub').innerHTML = subs.map(s => `<option value="${s}">${s}</option>`).join('');
+}
 
-    if(database.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:grey;">Belum ada data penilaian untuk dianalisis.</td></tr>`;
-        if(myChart) myChart.destroy();
-        return;
-    }
+async function simpanStruktur() {
+  renderDivisiDropdown();
+  await sb.from('struktur').upsert({ id: STRUKTUR_ID, data: struktur });
+}
 
-    let divisiGroup = {};
-    database.forEach(item => {
-        if(fDivisi !== "ALL" && item.divisiUtama !== fDivisi) return;
-        if(fPeriode !== "ALL" && item.periode !== fPeriode) return;
+function tambahDivisi() {
+  const nama = document.getElementById('inputDivisiBaru').value.trim();
+  if (!nama || struktur[nama]) return;
+  struktur[nama] = [];
+  document.getElementById('inputDivisiBaru').value = '';
+  simpanStruktur();
+}
 
-        let key = item.divisiUtama;
-        if(!divisiGroup[key]) {
-            divisiGroup[key] = { namaDivisi: key, totalKaryawan: 0, totalSkor: 0, semuaKPI: [] };
+function hapusDivisi() {
+  const target = document.getElementById('selectHapusDivisi').value;
+  if (!target) return;
+  konfirmasi(`Hapus divisi "${target}" beserta semua sub-posisinya?`, async () => {
+    delete struktur[target];
+    await simpanStruktur();
+  });
+}
+
+async function tambahSub() {
+  const div = document.getElementById('manageDivisiCtx').value;
+  const nama = document.getElementById('inputSubBaru').value.trim();
+  if (!div || !nama || (struktur[div] || []).includes(nama)) return;
+  struktur[div] = [...(struktur[div] || []), nama];
+  const newTpl = { ...template, [nama]: { kpi:[{area:'General',kpi:`KPI ${nama}`,bobot:100,logika:'max',target:100,realisasi:100,cara:'Internal'}], kompetensi:[{nama:'Kompetensi Utama',bobot:100,skor:85}] } };
+  template = newTpl;
+  document.getElementById('inputSubBaru').value = '';
+  await sb.from('struktur').upsert({ id: STRUKTUR_ID, data: struktur });
+  await sb.from('template_kpi').upsert({ id: TEMPLATE_ID, data: newTpl });
+  renderStruktur();
+  renderDivisiDropdown();
+  renderSubPosisiDropdown();
+}
+
+function hapusSub() {
+  const div    = document.getElementById('manageDivisiCtx').value;
+  const target = document.getElementById('selectHapusSub').value;
+  if (!div || !target) return;
+  konfirmasi(`Hapus sub-posisi "${target}" dari divisi ${div}?`, async () => {
+    struktur[div] = struktur[div].filter(s => s !== target);
+    await simpanStruktur();
+    renderManageSub();
+  });
+}
+
+// ─── BACKUP / RESTORE ─────────────────────────────────────────────────────────
+async function eksporData() {
+  const [{ data:sd },{ data:td },{ data:ad }] = await Promise.all([
+    sb.from('struktur').select('data').eq('id', STRUKTUR_ID).single(),
+    sb.from('template_kpi').select('data').eq('id', TEMPLATE_ID).single(),
+    sb.from('arsip_nilai').select('*'),
+  ]);
+  const paket = {
+    subPosisiDb: sd?.data || struktur,
+    templateKpiDb: td?.data || template,
+    arsipNilaiDb: (ad || []).map(r => ({ id:r.id, periode:r.periode, nama:r.nama, divisiUtama:r.divisi_utama, subPosisi:r.sub_posisi, strukturLengkap:r.struktur_lengkap, nilaiKPI:r.nilai_kpi, nilaiKomp:r.nilai_komp, nilaiAkhir:r.nilai_akhir, status:r.status, rincianKPI:r.rincian_kpi })),
+  };
+  const a = document.createElement('a');
+  a.href = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(paket, null, 2));
+  a.download = 'kpi_greencare_backup.json';
+  a.click();
+}
+
+function imporData(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async ev => {
+    try {
+      const d = JSON.parse(ev.target.result);
+      if (!d.subPosisiDb || !d.templateKpiDb || !d.arsipNilaiDb) { alert('Format file tidak valid!'); return; }
+      konfirmasi('Ini akan menimpa SEMUA data di database. Lanjutkan?', async () => {
+        await sb.from('struktur').upsert({ id: STRUKTUR_ID, data: d.subPosisiDb });
+        await sb.from('template_kpi').upsert({ id: TEMPLATE_ID, data: d.templateKpiDb });
+        await sb.from('arsip_nilai').delete().neq('id','0');
+        for (const item of d.arsipNilaiDb) {
+          await sb.from('arsip_nilai').upsert({ id:String(item.id), periode:item.periode, nama:item.nama, divisi_utama:item.divisiUtama, sub_posisi:item.subPosisi, struktur_lengkap:item.strukturLengkap, nilai_kpi:item.nilaiKPI, nilai_komp:item.nilaiKomp, nilai_akhir:parseFloat(item.nilaiAkhir)||0, status:item.status, rincian_kpi:item.rincianKPI });
         }
-        divisiGroup[key].totalKaryawan += 1;
-        divisiGroup[key].totalSkor += parseFloat(item.nilaiAkhir);
-        divisiGroup[key].semuaKPI = divisiGroup[key].semuaKPI.concat(item.rincianKPI);
-    });
-
-    let chartLabels = [];
-    let chartScores = [];
-
-    Object.keys(divisiGroup).forEach(key => {
-        let divData = divisiGroup[key];
-        let rataRata = divData.totalSkor / divData.totalKaryawan;
-        
-        chartLabels.push(divData.namaDivisi);
-        chartScores.push(rataRata.toFixed(1));
-
-        let statusKelulusan = rataRata >= 75 ? `<span class="badge" style="background-color:#27ae60;">✓ AMAN</span>` : `<span class="badge" style="background-color:#e74c3c;">✗ DIEVALUASI</span>`;
-
-        tbody.innerHTML += `
-            <tr>
-                <td><strong>${divData.namaDivisi}</strong></td>
-                <td>${divData.totalKaryawan} Orang Karyawan</td>
-                <td><strong>${rataRata.toFixed(1)}</strong> / 100</td>
-                <td>${statusKelulusan}</td>
-                <td><button class="btn btn-sm btn-purple" onclick="bukaDetailAIDivisi('${divData.namaDivisi}')">Lihat Analisis AI</button></td>
-            </tr>`;
-    });
-
-    let ctx = document.getElementById('performaChart').getContext('2d');
-    if (myChart) { myChart.destroy(); }
-
-    if(chartLabels.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:grey;">Tidak ada data yang cocok dengan kombinasi filter divisi.</td></tr>`;
-        return;
-    }
-
-    myChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: chartLabels,
-            datasets: [{
-                label: 'Rata-Rata Skor Akhir Divisi',
-                data: chartScores,
-                backgroundColor: 'rgba(52, 152, 219, 0.7)',
-                borderColor: 'rgba(41, 128, 185, 1)',
-                borderWidth: 2,
-                borderRadius: 5
-            }]
-        },
-        options: {
-            responsive: true,
-            scales: { y: { beginAtZero: true, max: 100 } },
-            plugins: { legend: { labels: { color: '#2980b9', font: { weight: 'bold' } } } }
-        }
-    });
+        struktur = d.subPosisiDb; template = d.templateKpiDb;
+        const { data: fresh } = await sb.from('arsip_nilai').select('*').order('created_at',{ ascending:false });
+        arsip = fresh || [];
+        renderDivisiDropdown(); renderDashboard(); renderFilterDropdowns();
+        alert('✅ Data berhasil di-restore!');
+      });
+    } catch { alert('File tidak dapat dibaca.'); }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
 }
-
-async function renderDropdownPeriodeFilter() {
-    let { data: arsipRows } = await sb.from('arsip_nilai').select('periode');
-    let pSelect = document.getElementById("filterDash2Periode");
-    if (pSelect) {
-        pSelect.innerHTML = `<option value="ALL">-- Semua Periode --</option>`;
-        let listPeriode = [...new Set((arsipRows || []).map(item => item.periode))].sort();
-        listPeriode.forEach(p => { pSelect.innerHTML += `<option value="${p}">${p}</option>`; });
-    }
-}
-
-async function bukaDetailKaryawan(idTarget) {
-    let { data: row } = await sb.from('arsip_nilai').select('*').eq('id', String(idTarget)).single();
-    if(!row) return;
-
-    let dataKaryawan = {
-        nama: row.nama, strukturLengkap: row.struktur_lengkap,
-        periode: row.periode, nilaiAkhir: row.nilai_akhir,
-        status: row.status, rincianKPI: row.rincian_kpi
-    };
-
-    document.getElementById("hModalNama").innerText = dataKaryawan.nama;
-    document.getElementById("hModalJabatan").innerText = `${dataKaryawan.strukturLengkap} (${dataKaryawan.periode})`;
-    document.getElementById("hModalSkor").innerText = `${dataKaryawan.nilaiAkhir} [Status: ${dataKaryawan.status}]`;
-
-    let tbody = document.getElementById("historyModalTableBody"); tbody.innerHTML = "";
-    (dataKaryawan.rincianKPI || []).forEach(kpiItem => {
-        let persen = parseFloat(kpiItem.capaian) || 0;
-        let badgeStatus = persen >= 100 ? `<span class="badge" style="background-color:#27ae60;">✓ Tercapai</span>` : (persen >= 85 ? `<span class="badge" style="background-color:#f1c40f;">Waspada</span>` : `<span class="badge" style="background-color:#e74c3c;">✗ Dibawah Target</span>`);
-        tbody.innerHTML += `<tr><td><strong>${kpiItem.area}</strong></td><td>${kpiItem.kpi}</td><td>${kpiItem.target}</td><td>${kpiItem.realisasi}</td><td style="font-weight:bold;">${kpiItem.capaian}</td><td>${badgeStatus}</td></tr>`;
-    });
-    document.getElementById("historyModal").style.display = "block";
-}
-function tutupHistoryModal() { document.getElementById("historyModal").style.display = "none"; }
-
-async function bukaDetailAIDivisi(namaDivisi) {
-    let { data: arsipRows } = await sb.from('arsip_nilai').select('divisi_utama, rincian_kpi').eq('divisi_utama', namaDivisi);
-    let kpiKolektif = [];
-    (arsipRows || []).forEach(item => { kpiKolektif = kpiKolektif.concat(item.rincian_kpi || []); });
-
-    let kpiSummary = {};
-    kpiKolektif.forEach(k => {
-        if(!kpiSummary[k.kpi]) { kpiSummary[k.kpi] = { area: k.area, namaKPI: k.kpi, totalPersen: 0, count: 0 }; }
-        kpiSummary[k.kpi].totalPersen += parseFloat(k.capaian) || 0;
-        kpiSummary[k.kpi].count += 1;
-    });
-
-    let sortedKPI = [];
-    Object.keys(kpiSummary).forEach(key => {
-        let item = kpiSummary[key]; item.avgCapaian = item.totalPersen / item.count; sortedKPI.push(item);
-    });
-    sortedKPI.sort((a, b) => a.avgCapaian - b.avgCapaian);
-
-    document.getElementById("aiModalTitle").innerText = `🔍 KOREKSI STRATEGIS DIVISI: ${namaDivisi.toUpperCase()}`;
-    let tbody = document.getElementById("aiModalTableBody"); tbody.innerHTML = "";
-    let itemBermasalahUtama = sortedKPI.slice(0, 3);
-    
-    itemBermasalahUtama.forEach(item => {
-        let statusMasalah = item.avgCapaian < 85 ? `<span style="color:#e74c3c; font-weight:bold;">Kritis</span>` : `<span style="color:#f39c12; font-weight:bold;">Optimasi</span>`;
-        tbody.innerHTML += `<tr><td><strong>${item.area}</strong></td><td>${item.namaKPI}</td><td style="color:#c0392b; font-weight:bold;">${item.avgCapaian.toFixed(1)}%</td><td>${statusMasalah}</td></tr>`;
-    });
-
-    let kpiTerburuk = itemBermasalahUtama[0] ? itemBermasalahUtama[0].namaKPI : "Umum";
-    let areaTerburuk = itemBermasalahUtama[0] ? itemBermasalahUtama[0].area : "SOP";
-    let avgPersen = itemBermasalahUtama[0] ? itemBermasalahUtama[0].avgCapaian.toFixed(1) : 0;
-
-    let aiOutputText = `Hasil audit otomatis pada level manajemen Divisi <strong>${namaDivisi}</strong> mendeteksi area bottleneck utama berada pada aspek <strong>${areaTerburuk}</strong> (Indikator: <em>"${kpiTerburuk}"</em>) dengan rata-rata pencapaian divisi sebesar ${avgPersen}%. <br><br>
-    <strong>Rekomendasi Kebijakan Direksi Greencare:</strong><br>
-    1. Lakukan audit workflow cross-functional untuk divisi ini.<br>
-    2. Sesuaikan bobot penalti logika jika instrumen ukur lapangan terlalu ketat.<br>
-    3. Standarisasi ulang target bulanan menyesuaikan kondisi riil kapasitas tim.`;
-
-    document.getElementById("aiTextContent").innerHTML = aiOutputText;
-    document.getElementById("aiModal").style.display = "block";
-}
-
-function tutupModal() { document.getElementById("aiModal").style.display = "none"; }
-async function hapusArsip(id) { 
-    if(confirm("Hapus data ini?")) { 
-        await sb.from('arsip_nilai').delete().eq('id', String(id)); 
-        await renderSemuaDropdownJabatan(); 
-        await tampilkanDashboard(); 
-    } 
-}
-
-async function bukaModalStruktur() { document.getElementById("strukturModal").style.display = "block"; await renderSemuaDropdownJabatan(); renderManageSubPosisiList(); }
-function tutupStrukturModal() { document.getElementById("strukturModal").style.display = "none"; }
-function renderManageSubPosisiList() {
-    let div = document.getElementById("selectManageDivisiContext").value;
-    let selectDelSub = document.getElementById("selectHapusSubPosisi");
-    selectDelSub.innerHTML = "";
-    if(div && subPosisiDatabase[div]) {
-        subPosisiDatabase[div].forEach(sub => { selectDelSub.innerHTML += `<option value="${sub}">${sub}</option>`; });
-    }
-}
-async function aksiTambahDivisi() {
-    let nama = document.getElementById("inputDivisiBaru").value.trim();
-    if(nama && !subPosisiDatabase[nama]) { subPosisiDatabase[nama] = []; document.getElementById("inputDivisiBaru").value = ""; await simpanStrukturKeStorage(); }
-}
-async function aksiHapusDivisi() {
-    let target = document.getElementById("selectHapusDivisi").value;
-    if(target && confirm(`Hapus divisi "${target}"?`)) { delete subPosisiDatabase[target]; await simpanStrukturKeStorage(); }
-}
-async function aksiTambahSubPosisi() {
-    let div = document.getElementById("selectManageDivisiContext").value;
-    let nama = document.getElementById("inputSubPosisiBaru").value.trim();
-    if(div && nama && !subPosisiDatabase[div].includes(nama)) {
-        subPosisiDatabase[div].push(nama);
-        templateKPIPosisi[nama] = {
-            kpi: [{area: "General", kpi: `Item KPI Baru ${nama}`, bobot: 100, logika: "max", target: 100, realisasi: 100, cara: "Internal"}],
-            kompetensi: [{nama: "Kompetensi Utama", bobot: 100, skor: 85}]
-        };
-        await sb.from('template_kpi').upsert({ id: TEMPLATE_ID, data: templateKPIPosisi });
-        document.getElementById("inputSubPosisiBaru").value = "";
-        await simpanStrukturKeStorage();
-        renderManageSubPosisiList();
-    }
-}
-async function aksiHapusSubPosisi() {
-    let div = document.getElementById("selectManageDivisiContext").value;
-    let target = document.getElementById("selectHapusSubPosisi").value;
-    if(div && target && confirm(`Hapus sub-posisi "${target}"?`)) { subPosisiDatabase[div] = subPosisiDatabase[div].filter(s => s !== target); await simpanStrukturKeStorage(); renderManageSubPosisiList(); }
-}
-
-window.onload = async function() { 
-    // Load struktur divisi dari Supabase
-    let { data: strData } = await sb.from('struktur').select('data').eq('id', STRUKTUR_ID).single();
-    if (strData && strData.data) subPosisiDatabase = strData.data;
-
-    // Load template KPI dari Supabase
-    let { data: tplData } = await sb.from('template_kpi').select('data').eq('id', TEMPLATE_ID).single();
-    if (tplData && tplData.data) templateKPIPosisi = tplData.data;
-
-    await renderSemuaDropdownJabatan(); 
-    await tampilkanDashboard(); 
-};
 </script>
 </body>
 </html>
