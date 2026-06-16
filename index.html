@@ -5,6 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KPI Homecare Greencare v8.5</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        // ============================================================
+        // KONFIGURASI SUPABASE — GANTI DENGAN CREDENTIALS KAMU
+        // ============================================================
+        const SUPABASE_URL = 'https://cwcxctmcdhahdfuiexel.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN3Y3hjdG1jZGhhaGRmdWlleGVsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1NTU5MjAsImV4cCI6MjA5NzEzMTkyMH0.L3Kelsl3tMur3HzkSZl36XqUq7-y39t6SQO3BcOLRhY';
+        // ============================================================
+        const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        const STRUKTUR_ID  = '00000000-0000-0000-0000-000000000001';
+        const TEMPLATE_ID  = '00000000-0000-0000-0000-000000000002';
+    </script>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f9f6; color: #333; }
         .container { max-width: 1350px; margin: auto; background: white; padding: 25px; border-radius: 8px; box-shadow: 0 0 15px rgba(39, 174, 96, 0.1); }
@@ -201,11 +213,11 @@
             <strong>🎛️ Filter Analitik & Chart:</strong>
             <div>
                 <label>Divisi Utama:</label>
-                <select id="filterDash2Divisi" onchange="analisisDivisiDanRenderChart()"></select>
+                <select id="filterDash2Divisi" onchange="tampilkanDashboard()"></select>
             </div>
             <div>
                 <label>Periode Waktu:</label>
-                <select id="filterDash2Periode" onchange="analisisDivisiDanRenderChart()"></select>
+                <select id="filterDash2Periode" onchange="tampilkanDashboard()"></select>
             </div>
         </div>
 
@@ -302,16 +314,16 @@
 </div>
 
 <script>
-// Database Struktur Utama
-let subPosisiDatabase = JSON.parse(localStorage.getItem("sub_posisi_db_v80")) || {
+// Database Struktur Utama — diisi dari Supabase saat onload
+let subPosisiDatabase = {
     "HRD": ["Staff HRD", "Manager HRD"], 
     "Marketing": ["Staff Sales"], 
     "Finance": ["Staff Akuntansi"],
     "Operasional": ["SPV", "Case Manager", "CS Admin", "Dokter", "Perawat", "Caregiver"]
 };
 
-// Database Master Template Item KPI & Kompetensi per Sub-Posisi
-let templateKPIPosisi = JSON.parse(localStorage.getItem("template_kpi_posisi_db_v80")) || {
+// Database Master Template Item KPI & Kompetensi per Sub-Posisi — diisi dari Supabase saat onload
+let templateKPIPosisi = {
     "Staff HRD": {
         kpi: [
             {area: "Internal Process", kpi: "Kecepatan Rekrutmen Karyawan", bobot: 50, logika: "max", target: 100, realisasi: 90, cara: "Data HR"},
@@ -341,12 +353,22 @@ let komCounter = 0;
 let myChart = null;
 let isLoadingTemplate = false;
 
-// ======================== BARU: FUNGSI EKSPOR & IMPOR DATA (BACKUP / RESTORE) ========================
-function eksporSeluruhData() {
+// ======================== FUNGSI EKSPOR & IMPOR DATA (BACKUP / RESTORE) ========================
+async function eksporSeluruhData() {
+    let { data: strData } = await sb.from('struktur').select('data').eq('id', STRUKTUR_ID).single();
+    let { data: tplData } = await sb.from('template_kpi').select('data').eq('id', TEMPLATE_ID).single();
+    let { data: arsipRows } = await sb.from('arsip_nilai').select('*');
+
     let paketDataGreencare = {
-        subPosisiDb: JSON.parse(localStorage.getItem("sub_posisi_db_v80")) || subPosisiDatabase,
-        templateKpiDb: JSON.parse(localStorage.getItem("template_kpi_posisi_db_v80")) || templateKPIPosisi,
-        arsipNilaiDb: JSON.parse(localStorage.getItem("kpi_db_v80")) || []
+        subPosisiDb: strData ? strData.data : subPosisiDatabase,
+        templateKpiDb: tplData ? tplData.data : templateKPIPosisi,
+        arsipNilaiDb: (arsipRows || []).map(r => ({
+            id: r.id, periode: r.periode, nama: r.nama,
+            divisiUtama: r.divisi_utama, subPosisi: r.sub_posisi,
+            strukturLengkap: r.struktur_lengkap, nilaiKPI: r.nilai_kpi,
+            nilaiKomp: r.nilai_komp, nilaiAkhir: r.nilai_akhir,
+            status: r.status, rincianKPI: r.rincian_kpi
+        }))
     };
 
     let dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(paketDataGreencare, null, 2));
@@ -367,47 +389,53 @@ function imporSeluruhData(event) {
     if (!file) return;
 
     let reader = new FileReader();
-    reader.onload = function(e) {
+    reader.onload = async function(e) {
         try {
             let dataHasilImport = JSON.parse(e.target.result);
             
-            // Validasi format file backup
             if (dataHasilImport.subPosisiDb && dataHasilImport.templateKpiDb && dataHasilImport.arsipNilaiDb) {
-                if (confirm("⚠️ PERINGATAN: Mengimpor data baru akan menimpa data yang ada di device ini saat ini. Lanjutkan?")) {
+                if (confirm("⚠️ PERINGATAN: Mengimpor data baru akan menimpa data yang ada di database. Lanjutkan?")) {
                     
-                    // Simpan ke LocalStorage
-                    localStorage.setItem("sub_posisi_db_v80", JSON.stringify(dataHasilImport.subPosisiDb));
-                    localStorage.setItem("template_kpi_posisi_db_v80", JSON.stringify(dataHasilImport.templateKpiDb));
-                    localStorage.setItem("kpi_db_v80", JSON.stringify(dataHasilImport.arsipNilaiDb));
+                    // Simpan ke Supabase
+                    await sb.from('struktur').upsert({ id: STRUKTUR_ID, data: dataHasilImport.subPosisiDb });
+                    await sb.from('template_kpi').upsert({ id: TEMPLATE_ID, data: dataHasilImport.templateKpiDb });
+
+                    // Hapus arsip lama lalu insert baru
+                    await sb.from('arsip_nilai').delete().neq('id', '0');
+                    for (let item of dataHasilImport.arsipNilaiDb) {
+                        await sb.from('arsip_nilai').upsert({
+                            id: String(item.id), periode: item.periode, nama: item.nama,
+                            divisi_utama: item.divisiUtama, sub_posisi: item.subPosisi,
+                            struktur_lengkap: item.strukturLengkap, nilai_kpi: item.nilaiKPI,
+                            nilai_komp: item.nilaiKomp, nilai_akhir: parseFloat(item.nilaiAkhir) || 0,
+                            status: item.status, rincian_kpi: item.rincianKPI
+                        });
+                    }
                     
-                    // Perbarui variabel sistem di RAM
                     subPosisiDatabase = dataHasilImport.subPosisiDb;
                     templateKPIPosisi = dataHasilImport.templateKpiDb;
 
-                    alert("🎉 Pemulihan Data Sukses! Semua template dan riwayat ter-update.");
-                    
-                    // Refresh tampilan halaman secara utuh
-                    renderSemuaDropdownJabatan();
-                    tampilkanDashboard();
+                    alert("🎉 Pemulihan Data Sukses! Semua template dan riwayat ter-update ke Supabase.");
+                    await renderSemuaDropdownJabatan();
+                    await tampilkanDashboard();
                 }
             } else {
                 alert("Gagal mengimpor file. Format isi berkas backup tidak cocok!");
             }
         } catch (err) {
-            alert("Terjadi kesalahan pembacaan berkas JSON!");
+            alert("Terjadi kesalahan: " + err.message);
         }
     };
     reader.readAsText(file);
-    event.target.value = ''; // Reset input agar bisa upload file yang sama berkali-kali
-}
-// ===================================================================================================
-
-function simpanStrukturKeStorage() {
-    localStorage.setItem("sub_posisi_db_v80", JSON.stringify(subPosisiDatabase));
-    renderSemuaDropdownJabatan();
+    event.target.value = '';
 }
 
-function renderSemuaDropdownJabatan() {
+async function simpanStrukturKeStorage() {
+    await sb.from('struktur').upsert({ id: STRUKTUR_ID, data: subPosisiDatabase });
+    await renderSemuaDropdownJabatan();
+}
+
+async function renderSemuaDropdownJabatan() {
     let divSelect = document.getElementById("divisi");
     let f1Select = document.getElementById("filterDash1Posisi");
     let f2DivSelect = document.getElementById("filterDash2Divisi");
@@ -436,7 +464,7 @@ function renderSemuaDropdownJabatan() {
     });
 
     renderSubPosisiDropdown();
-    renderDropdownPeriodeFilter();
+    await renderDropdownPeriodeFilter();
 }
 
 function renderSubPosisiDropdown() {
@@ -449,11 +477,15 @@ function renderSubPosisiDropdown() {
     muatTemplateBerdasarkanPosisi();
 }
 
-function muatTemplateBerdasarkanPosisi() {
+async function muatTemplateBerdasarkanPosisi() {
     isLoadingTemplate = true;
     let sub = document.getElementById("subPosisi").value;
     if(!sub) { isLoadingTemplate = false; return; }
-    
+
+    // Selalu fetch fresh dari Supabase supaya sync antar device
+    let { data: tplData } = await sb.from("template_kpi").select("data").eq("id", TEMPLATE_ID).single();
+    if (tplData && tplData.data) templateKPIPosisi = tplData.data;
+
     let tbodyKPI = document.getElementById("kpiTableBody");
     let tbodyKom = document.getElementById("kompetensiTableBody");
     tbodyKPI.innerHTML = "";
@@ -461,7 +493,7 @@ function muatTemplateBerdasarkanPosisi() {
 
     if (!templateKPIPosisi[sub]) {
         templateKPIPosisi[sub] = {
-            kpi: [{area: "General", kpi: `Item KPI Utama ${sub}`, bobot: 100, logika: "max", target: 100, realisasi: 100, cara: "Internal"}],
+            kpi: [{area: "General", kpi: "Item KPI Utama " + sub, bobot: 100, logika: "max", target: 100, realisasi: 100, cara: "Internal"}],
             kompetensi: [{nama: "Kompetensi Umum", bobot: 100, skor: 80}]
         };
     }
@@ -480,7 +512,7 @@ function muatTemplateBerdasarkanPosisi() {
     hitungTotal();
 }
 
-function simpanTemplatePosisiOtomatis() {
+async function simpanTemplatePosisiOtomatis() {
     if (isLoadingTemplate) return;
 
     let sub = document.getElementById("subPosisi").value;
@@ -513,7 +545,7 @@ function simpanTemplatePosisiOtomatis() {
     }
 
     templateKPIPosisi[sub] = { kpi: kpiSaved, kompetensi: komSaved };
-    localStorage.setItem("template_kpi_posisi_db_v80", JSON.stringify(templateKPIPosisi));
+    await sb.from('template_kpi').upsert({ id: TEMPLATE_ID, data: templateKPIPosisi });
     showSaveStatus();
 }
 
@@ -651,8 +683,7 @@ function hitungTotal() {
     document.getElementById("statusFinal").innerText = status; document.getElementById("finalBox").style.backgroundColor = color;
 }
 
-function simpanKeDatabase() {
-    let database = JSON.parse(localStorage.getItem("kpi_db_v80")) || [];
+async function simpanKeDatabase() {
     let div = document.getElementById("divisi").value;
     let sub = document.getElementById("subPosisi").value;
     
@@ -669,31 +700,43 @@ function simpanKeDatabase() {
         });
     }
 
-    let dataBaru = {
-        id: Date.now(),
+    let entryId = String(Date.now());
+    let { error } = await sb.from('arsip_nilai').insert({
+        id: entryId,
         periode: document.getElementById("periode").value,
         nama: document.getElementById("namaKaryawan").value,
-        divisiUtama: div,
-        subPosisi: sub,
-        strukturLengkap: `${div} - ${sub}`,
-        nilaiKPI: document.getElementById("totalNilaiKPI").innerText,
-        nilaiKomp: document.getElementById("totalNilaiKompetensi").innerText,
-        nilaiAkhir: document.getElementById("nilaiAkhirFinal").innerText,
+        divisi_utama: div,
+        sub_posisi: sub,
+        struktur_lengkap: `${div} - ${sub}`,
+        nilai_kpi: document.getElementById("totalNilaiKPI").innerText,
+        nilai_komp: document.getElementById("totalNilaiKompetensi").innerText,
+        nilai_akhir: parseFloat(document.getElementById("nilaiAkhirFinal").innerText) || 0,
         status: document.getElementById("statusFinal").innerText,
-        rincianKPI: itemsKPISaved
-    };
+        rincian_kpi: itemsKPISaved
+    });
 
-    database.push(dataBaru); localStorage.setItem("kpi_db_v80", JSON.stringify(database));
-    alert("Data Greencare berhasil disimpan!"); 
-    tampilkanDashboard();
+    if (error) {
+        alert("Gagal menyimpan: " + error.message);
+    } else {
+        alert("Data Greencare berhasil disimpan ke Supabase!");
+        await tampilkanDashboard();
+    }
 }
 
-function tampilkanDashboard() {
-    let database = JSON.parse(localStorage.getItem("kpi_db_v80")) || [];
+async function tampilkanDashboard() {
+    let { data: arsipRows } = await sb.from('arsip_nilai').select('*').order('created_at', { ascending: false });
+    let database = (arsipRows || []).map(r => ({
+        id: r.id, periode: r.periode, nama: r.nama,
+        divisiUtama: r.divisi_utama, subPosisi: r.sub_posisi,
+        strukturLengkap: r.struktur_lengkap, nilaiKPI: r.nilai_kpi,
+        nilaiKomp: r.nilai_komp, nilaiAkhir: r.nilai_akhir,
+        status: r.status, rincianKPI: r.rincian_kpi
+    }));
+
     let tbody = document.getElementById("dashboardTableBody"); tbody.innerHTML = "";
     let filterPosisi = document.getElementById("filterDash1Posisi").value;
 
-    database.reverse().forEach(item => {
+    database.forEach(item => {
         if(filterPosisi !== "ALL" && item.subPosisi !== filterPosisi) return;
 
         let bColor = item.status === "Sangat Baik" ? "#27ae60" : (item.status === "Baik" ? "#2ecc71" : (item.status === "Cukup" ? "#f1c40f" : "#e74c3c"));
@@ -703,16 +746,16 @@ function tampilkanDashboard() {
                 <td>${item.nilaiKPI}</td><td>${item.nilaiKomp}</td><td><strong>${item.nilaiAkhir}</strong></td>
                 <td><span class="badge" style="background-color:${bColor}">${item.status}</span></td>
                 <td>
-                    <button class="btn btn-sm btn-orange" onclick="bukaDetailKaryawan(${item.id})">🔍 Lihat Rincian KPI</button>
-                    <button class="btn btn-danger btn-sm" onclick="hapusArsip(${item.id})">Hapus</button>
+                    <button class="btn btn-sm btn-orange" onclick="bukaDetailKaryawan('${item.id}')">🔍 Lihat Rincian KPI</button>
+                    <button class="btn btn-danger btn-sm" onclick="hapusArsip('${item.id}')">Hapus</button>
                 </td>
             </tr>`;
     });
-    analisisDivisiDanRenderChart();
+    analisisDivisiDanRenderChart(database);
 }
 
-function analisisDivisiDanRenderChart() {
-    let database = JSON.parse(localStorage.getItem("kpi_db_v80")) || [];
+function analisisDivisiDanRenderChart(database) {
+    if (!database) database = [];
     let tbody = document.getElementById("posisiAnalyticsTableBody");
     tbody.innerHTML = "";
 
@@ -790,27 +833,32 @@ function analisisDivisiDanRenderChart() {
     });
 }
 
-function renderDropdownPeriodeFilter() {
-    let database = JSON.parse(localStorage.getItem("kpi_db_v80")) || [];
+async function renderDropdownPeriodeFilter() {
+    let { data: arsipRows } = await sb.from('arsip_nilai').select('periode');
     let pSelect = document.getElementById("filterDash2Periode");
     if (pSelect) {
         pSelect.innerHTML = `<option value="ALL">-- Semua Periode --</option>`;
-        let listPeriode = [...new Set(database.map(item => item.periode))].sort();
+        let listPeriode = [...new Set((arsipRows || []).map(item => item.periode))].sort();
         listPeriode.forEach(p => { pSelect.innerHTML += `<option value="${p}">${p}</option>`; });
     }
 }
 
-function bukaDetailKaryawan(idTarget) {
-    let database = JSON.parse(localStorage.getItem("kpi_db_v80")) || [];
-    let dataKaryawan = database.find(item => item.id === idTarget);
-    if(!dataKaryawan) return;
+async function bukaDetailKaryawan(idTarget) {
+    let { data: row } = await sb.from('arsip_nilai').select('*').eq('id', String(idTarget)).single();
+    if(!row) return;
+
+    let dataKaryawan = {
+        nama: row.nama, strukturLengkap: row.struktur_lengkap,
+        periode: row.periode, nilaiAkhir: row.nilai_akhir,
+        status: row.status, rincianKPI: row.rincian_kpi
+    };
 
     document.getElementById("hModalNama").innerText = dataKaryawan.nama;
     document.getElementById("hModalJabatan").innerText = `${dataKaryawan.strukturLengkap} (${dataKaryawan.periode})`;
     document.getElementById("hModalSkor").innerText = `${dataKaryawan.nilaiAkhir} [Status: ${dataKaryawan.status}]`;
 
     let tbody = document.getElementById("historyModalTableBody"); tbody.innerHTML = "";
-    dataKaryawan.rincianKPI.forEach(kpiItem => {
+    (dataKaryawan.rincianKPI || []).forEach(kpiItem => {
         let persen = parseFloat(kpiItem.capaian) || 0;
         let badgeStatus = persen >= 100 ? `<span class="badge" style="background-color:#27ae60;">✓ Tercapai</span>` : (persen >= 85 ? `<span class="badge" style="background-color:#f1c40f;">Waspada</span>` : `<span class="badge" style="background-color:#e74c3c;">✗ Dibawah Target</span>`);
         tbody.innerHTML += `<tr><td><strong>${kpiItem.area}</strong></td><td>${kpiItem.kpi}</td><td>${kpiItem.target}</td><td>${kpiItem.realisasi}</td><td style="font-weight:bold;">${kpiItem.capaian}</td><td>${badgeStatus}</td></tr>`;
@@ -819,10 +867,10 @@ function bukaDetailKaryawan(idTarget) {
 }
 function tutupHistoryModal() { document.getElementById("historyModal").style.display = "none"; }
 
-function bukaDetailAIDivisi(namaDivisi) {
-    let database = JSON.parse(localStorage.getItem("kpi_db_v80")) || [];
+async function bukaDetailAIDivisi(namaDivisi) {
+    let { data: arsipRows } = await sb.from('arsip_nilai').select('divisi_utama, rincian_kpi').eq('divisi_utama', namaDivisi);
     let kpiKolektif = [];
-    database.forEach(item => { if(item.divisiUtama === namaDivisi) { kpiKolektif = kpiKolektif.concat(item.rincianKPI); } });
+    (arsipRows || []).forEach(item => { kpiKolektif = kpiKolektif.concat(item.rincian_kpi || []); });
 
     let kpiSummary = {};
     kpiKolektif.forEach(k => {
@@ -861,9 +909,15 @@ function bukaDetailAIDivisi(namaDivisi) {
 }
 
 function tutupModal() { document.getElementById("aiModal").style.display = "none"; }
-function hapusArsip(id) { if(confirm("Hapus data ini?")) { let db = JSON.parse(localStorage.getItem("kpi_db_v80")).filter(i => i.id !== id); localStorage.setItem("kpi_db_v80", JSON.stringify(db)); renderSemuaDropdownJabatan(); tampilkanDashboard(); } }
+async function hapusArsip(id) { 
+    if(confirm("Hapus data ini?")) { 
+        await sb.from('arsip_nilai').delete().eq('id', String(id)); 
+        await renderSemuaDropdownJabatan(); 
+        await tampilkanDashboard(); 
+    } 
+}
 
-function bukaModalStruktur() { document.getElementById("strukturModal").style.display = "block"; renderSemuaDropdownJabatan(); renderManageSubPosisiList(); }
+async function bukaModalStruktur() { document.getElementById("strukturModal").style.display = "block"; await renderSemuaDropdownJabatan(); renderManageSubPosisiList(); }
 function tutupStrukturModal() { document.getElementById("strukturModal").style.display = "none"; }
 function renderManageSubPosisiList() {
     let div = document.getElementById("selectManageDivisiContext").value;
@@ -873,15 +927,15 @@ function renderManageSubPosisiList() {
         subPosisiDatabase[div].forEach(sub => { selectDelSub.innerHTML += `<option value="${sub}">${sub}</option>`; });
     }
 }
-function aksiTambahDivisi() {
+async function aksiTambahDivisi() {
     let nama = document.getElementById("inputDivisiBaru").value.trim();
-    if(nama && !subPosisiDatabase[nama]) { subPosisiDatabase[nama] = []; document.getElementById("inputDivisiBaru").value = ""; simpanStrukturKeStorage(); }
+    if(nama && !subPosisiDatabase[nama]) { subPosisiDatabase[nama] = []; document.getElementById("inputDivisiBaru").value = ""; await simpanStrukturKeStorage(); }
 }
-function aksiHapusDivisi() {
+async function aksiHapusDivisi() {
     let target = document.getElementById("selectHapusDivisi").value;
-    if(target && confirm(`Hapus divisi "${target}"?`)) { delete subPosisiDatabase[target]; simpanStrukturKeStorage(); }
+    if(target && confirm(`Hapus divisi "${target}"?`)) { delete subPosisiDatabase[target]; await simpanStrukturKeStorage(); }
 }
-function aksiTambahSubPosisi() {
+async function aksiTambahSubPosisi() {
     let div = document.getElementById("selectManageDivisiContext").value;
     let nama = document.getElementById("inputSubPosisiBaru").value.trim();
     if(div && nama && !subPosisiDatabase[div].includes(nama)) {
@@ -890,28 +944,29 @@ function aksiTambahSubPosisi() {
             kpi: [{area: "General", kpi: `Item KPI Baru ${nama}`, bobot: 100, logika: "max", target: 100, realisasi: 100, cara: "Internal"}],
             kompetensi: [{nama: "Kompetensi Utama", bobot: 100, skor: 85}]
         };
-        localStorage.setItem("template_kpi_posisi_db_v80", JSON.stringify(templateKPIPosisi));
+        await sb.from('template_kpi').upsert({ id: TEMPLATE_ID, data: templateKPIPosisi });
         document.getElementById("inputSubPosisiBaru").value = "";
-        simpanStrukturKeStorage();
+        await simpanStrukturKeStorage();
         renderManageSubPosisiList();
     }
 }
-function aksiHapusSubPosisi() {
+async function aksiHapusSubPosisi() {
     let div = document.getElementById("selectManageDivisiContext").value;
     let target = document.getElementById("selectHapusSubPosisi").value;
-    if(div && target && confirm(`Hapus sub-posisi "${target}"?`)) { subPosisiDatabase[div] = subPosisiDatabase[div].filter(s => s !== target); simpanStrukturKeStorage(); renderManageSubPosisiList(); }
+    if(div && target && confirm(`Hapus sub-posisi "${target}"?`)) { subPosisiDatabase[div] = subPosisiDatabase[div].filter(s => s !== target); await simpanStrukturKeStorage(); renderManageSubPosisiList(); }
 }
 
-window.onload = function() { 
-    // Load data local storage jika ada saat aplikasi pertama start
-    if(localStorage.getItem("sub_posisi_db_v80")) {
-        subPosisiDatabase = JSON.parse(localStorage.getItem("sub_posisi_db_v80"));
-    }
-    if(localStorage.getItem("template_kpi_posisi_db_v80")) {
-        templateKPIPosisi = JSON.parse(localStorage.getItem("template_kpi_posisi_db_v80"));
-    }
-    renderSemuaDropdownJabatan(); 
-    tampilkanDashboard(); 
+window.onload = async function() { 
+    // Load struktur divisi dari Supabase
+    let { data: strData } = await sb.from('struktur').select('data').eq('id', STRUKTUR_ID).single();
+    if (strData && strData.data) subPosisiDatabase = strData.data;
+
+    // Load template KPI dari Supabase
+    let { data: tplData } = await sb.from('template_kpi').select('data').eq('id', TEMPLATE_ID).single();
+    if (tplData && tplData.data) templateKPIPosisi = tplData.data;
+
+    await renderSemuaDropdownJabatan(); 
+    await tampilkanDashboard(); 
 };
 </script>
 </body>
