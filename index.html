@@ -421,6 +421,9 @@ let komRows = [];
 let rowId = 0;
 let myChart = null;
 let saveTimer = null;
+let lastArsipCount = 0;
+let lastStrukturJSON = '';
+let lastTemplateJSON = '';
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 function capaian(logika, target, realisasi) {
@@ -458,7 +461,7 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-pane').forEach(p => p.classList.toggle('active', p.id === 'tab-' + tab));
   if (tab === 'dashboard') renderDashboard();
   if (tab === 'analitik')  renderAnalitik();
-  if (tab === 'struktur')  renderStruktur();
+  if (tab === 'struktur')  renderPreviewStruktur();
 }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
@@ -471,27 +474,28 @@ window.onload = async function() {
   if (sd?.data) struktur = sd.data;
   if (td?.data) template = td.data;
   arsip = ad || [];
-  renderDivisiDropdown();
+
+  renderDropdownDivisi();
+  renderFilterDropdowns();
   document.getElementById('divisi').value = '';
   document.getElementById('subPosisi').innerHTML = '<option value="">-- Pilih Sub-Posisi --</option>';
-  document.getElementById('kpiRowsContainer').innerHTML = '';
-  document.getElementById('komRowsContainer').innerHTML = '';
 
-  // ── REALTIME + POLLING FALLBACK ─────────────────────────────────────────────
+  // Realtime
   sb.channel('rt-arsip').on('postgres_changes', { event: '*', schema: 'public', table: 'arsip_nilai' }, onArsipChange).subscribe();
   sb.channel('rt-struktur').on('postgres_changes', { event: '*', schema: 'public', table: 'struktur' }, onStrukturChange).subscribe();
   sb.channel('rt-template').on('postgres_changes', { event: '*', schema: 'public', table: 'template_kpi' }, onTemplateChange).subscribe();
 
-  // Polling fallback setiap 8 detik
+  // Polling fallback
   lastArsipCount = arsip.length;
   lastStrukturJSON = JSON.stringify(struktur);
   setInterval(doPolling, 8000);
 };
 
-// ── HANDLER FUNCTIONS (di luar onload supaya valid di semua browser) ──────────
+// ─── REALTIME HANDLERS ───────────────────────────────────────────────────────
 function onArsipChange() {
   sb.from('arsip_nilai').select('*').order('created_at', { ascending: false }).then(({ data }) => {
     arsip = data || [];
+    lastArsipCount = arsip.length;
     renderFilterDropdowns();
     const tab = document.querySelector('.tab-btn.active')?.dataset.tab;
     if (tab === 'dashboard') renderDashboard();
@@ -504,8 +508,12 @@ function onStrukturChange() {
   sb.from('struktur').select('data').eq('id', STRUKTUR_ID).single().then(({ data: sd2 }) => {
     if (!sd2?.data) return;
     struktur = sd2.data;
-    renderDivisiDropdown(); renderSubPosisiDropdown();
-    renderManageSub(); renderStruktur(); renderFilterDropdowns();
+    lastStrukturJSON = JSON.stringify(struktur);
+    renderDropdownDivisi();
+    renderSubPosisiDropdown();
+    renderManageSub();
+    renderPreviewStruktur();
+    renderFilterDropdowns();
     showSyncToast('🏢 Struktur organisasi diperbarui');
   });
 }
@@ -517,6 +525,7 @@ function onTemplateChange() {
     const sub = document.getElementById('subPosisi').value;
     const oldJSON = JSON.stringify(template[sub]);
     template = td2.data;
+    lastTemplateJSON = JSON.stringify(td2.data[sub]);
     if (JSON.stringify(template[sub]) !== oldJSON) {
       loadTemplateFromState(sub);
       showSyncToast('🔄 Template KPI diperbarui');
@@ -524,10 +533,7 @@ function onTemplateChange() {
   });
 }
 
-let lastArsipCount = 0;
-let lastStrukturJSON = '';
-let lastTemplateJSON = '';
-
+// ─── POLLING FALLBACK ─────────────────────────────────────────────────────────
 async function doPolling() {
   if (saveTimer) return;
   try {
@@ -537,24 +543,60 @@ async function doPolling() {
       sb.from('template_kpi').select('data').eq('id', TEMPLATE_ID).single(),
     ]);
     const currentCount = countRes.count ?? 0;
-    if (currentCount !== lastArsipCount) { lastArsipCount = currentCount; onArsipChange(); }
+    if (currentCount !== lastArsipCount) { onArsipChange(); }
     const newStr = JSON.stringify(sd2?.data);
-    if (newStr !== lastStrukturJSON) { lastStrukturJSON = newStr; onStrukturChange(); }
+    if (newStr !== lastStrukturJSON) { onStrukturChange(); }
     const sub = document.getElementById('subPosisi').value;
     const newTpl = JSON.stringify(td2?.data?.[sub]);
-    if (newTpl !== lastTemplateJSON && lastTemplateJSON !== '') { lastTemplateJSON = newTpl; onTemplateChange(); }
-    else lastTemplateJSON = newTpl;
+    if (lastTemplateJSON && newTpl !== lastTemplateJSON) { onTemplateChange(); }
+    else if (!lastTemplateJSON) lastTemplateJSON = newTpl;
   } catch(e) { /* silent */ }
 }
 
-// ── SYNC TOAST ────────────────────────────────────────────────────────────────
+// ─── REFRESH MANUAL ──────────────────────────────────────────────────────────
+async function refreshSemua() {
+  const btn = document.getElementById('btnRefresh');
+  const lbl = document.getElementById('refreshLabel');
+  btn.disabled = true;
+  lbl.textContent = '...';
+  try {
+    const [{ data: ad }, { data: sd2 }, { data: td2 }] = await Promise.all([
+      sb.from('arsip_nilai').select('*').order('created_at', { ascending: false }),
+      sb.from('struktur').select('data').eq('id', STRUKTUR_ID).single(),
+      sb.from('template_kpi').select('data').eq('id', TEMPLATE_ID).single(),
+    ]);
+    arsip = ad || [];
+    if (sd2?.data) struktur = sd2.data;
+    if (td2?.data) template = td2.data;
+    lastArsipCount = arsip.length;
+    lastStrukturJSON = JSON.stringify(struktur);
+    renderDropdownDivisi();
+    renderSubPosisiDropdown();
+    renderManageSub();
+    renderPreviewStruktur();
+    renderFilterDropdowns();
+    const tab = document.querySelector('.tab-btn.active')?.dataset.tab;
+    if (tab === 'dashboard') renderDashboard();
+    if (tab === 'analitik')  renderAnalitik();
+    const sub = document.getElementById('subPosisi').value;
+    if (sub) loadTemplateFromState(sub);
+    showSyncToast('✅ Data berhasil diperbarui');
+  } catch(e) {
+    showSyncToast('❌ Gagal refresh: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    lbl.textContent = 'Refresh';
+  }
+}
+
+// ─── SYNC TOAST ──────────────────────────────────────────────────────────────
 let toastTimer = null;
 function showSyncToast(msg) {
   let toast = document.getElementById('syncToast');
   if (!toast) {
     toast = document.createElement('div');
     toast.id = 'syncToast';
-    toast.style.cssText = 'position:fixed;bottom:72px;left:50%;transform:translateX(-50%);background:#1f2937;color:#fff;padding:8px 16px;border-radius:20px;font-size:12px;font-weight:600;z-index:999;box-shadow:0 4px 12px rgba(0,0,0,.25);transition:opacity .3s;white-space:nowrap';
+    toast.style.cssText = 'position:fixed;bottom:72px;left:50%;transform:translateX(-50%);background:#1f2937;color:#fff;padding:8px 16px;border-radius:20px;font-size:12px;font-weight:600;z-index:999;box-shadow:0 4px 12px rgba(0,0,0,.25);transition:opacity .3s;white-space:nowrap;pointer-events:none';
     document.body.appendChild(toast);
   }
   toast.textContent = msg;
@@ -563,70 +605,36 @@ function showSyncToast(msg) {
   toastTimer = setTimeout(() => { toast.style.opacity = '0'; }, 3000);
 }
 
-
-// ── REFRESH MANUAL ────────────────────────────────────────────────────────────
-async function refreshSemua() {
-  const btn = document.getElementById("btnRefresh");
-  const lbl = document.getElementById("refreshLabel");
-  btn.disabled = true;
-  lbl.textContent = "...";
-  try {
-    const [{ data: ad }, { data: sd2 }, { data: td2 }] = await Promise.all([
-      sb.from("arsip_nilai").select("*").order("created_at", { ascending: false }),
-      sb.from("struktur").select("data").eq("id", STRUKTUR_ID).single(),
-      sb.from("template_kpi").select("data").eq("id", TEMPLATE_ID).single(),
-    ]);
-    arsip = ad || [];
-    if (sd2?.data) struktur = sd2.data;
-    if (td2?.data) template = td2.data;
-    renderDivisiDropdown(); renderSubPosisiDropdown();
-    renderManageSub(); renderStruktur(); renderFilterDropdowns();
-    const tab = document.querySelector(".tab-btn.active")?.dataset.tab;
-    if (tab === "dashboard") renderDashboard();
-    if (tab === "analitik")  renderAnalitik();
-    const sub = document.getElementById("subPosisi").value;
-    if (sub) loadTemplateFromState(sub);
-    showSyncToast("✅ Data berhasil diperbarui");
-  } catch(e) {
-    showSyncToast("❌ Gagal refresh: " + e.message);
-  } finally {
-    btn.disabled = false;
-    lbl.textContent = "Refresh";
-  }
-}
-// ─── DROPDOWN RENDERS ────────────────────────────────────────────────────────
-function renderDivisiDropdown() {
+// ─── DROPDOWN RENDERS ─────────────────────────────────────────────────────────
+// FIX B2/B3/B4: renderDropdownDivisi does NOT call renderStruktur
+// renderStruktur (now renderPreviewStruktur) does NOT call renderDropdownDivisi
+function renderDropdownDivisi() {
   const divs = Object.keys(struktur);
-  ['divisi','selectHapusDivisi','manageDivisiCtx'].forEach(id => {
+  ['divisi', 'selectHapusDivisi', 'manageDivisiCtx'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
     const prev = el.value;
-    if (id === 'manageDivisiCtx') {
-      el.innerHTML = `<option value="">-- Pilih Divisi --</option>` + divs.map(d => `<option value="${d}">${d}</option>`).join('');
-    } else {
-      el.innerHTML = `<option value="">-- Pilih Divisi --</option>` + divs.map(d => `<option value="${d}">${d}</option>`).join('');
-    }
+    const emptyLabel = id === 'divisi' ? '-- Pilih Divisi --' : (id === 'manageDivisiCtx' ? '-- Pilih Divisi --' : '-- Pilih --');
+    el.innerHTML = `<option value="">${emptyLabel}</option>` + divs.map(d => `<option value="${d}">${d}</option>`).join('');
     if (prev && divs.includes(prev)) el.value = prev;
   });
-  renderFilterDropdowns();
-  renderStruktur();
 }
 
 function renderSubPosisiDropdown() {
   const div = document.getElementById('divisi').value;
   const subs = struktur[div] || [];
-  document.getElementById('subPosisi').innerHTML = `<option value="">-- Pilih Sub-Posisi --</option>` + subs.map(s => `<option value="${s}">${s}</option>`).join('');
+  document.getElementById('subPosisi').innerHTML = '<option value="">-- Pilih Sub-Posisi --</option>' + subs.map(s => `<option value="${s}">${s}</option>`).join('');
 }
 
 function renderFilterDropdowns() {
   const allSubs = Object.values(struktur).flat();
   const fp = document.getElementById('filterPosisi');
-  if (fp) fp.innerHTML = `<option value="ALL">Semua Posisi</option>` + allSubs.map(s => `<option value="${s}">${s}</option>`).join('');
+  if (fp) fp.innerHTML = '<option value="ALL">Semua Posisi</option>' + allSubs.map(s => `<option value="${s}">${s}</option>`).join('');
   const fd = document.getElementById('filterDivisiAnalitik');
-  if (fd) fd.innerHTML = `<option value="ALL">Semua Divisi</option>` + Object.keys(struktur).map(d => `<option value="${d}">${d}</option>`).join('');
+  if (fd) fd.innerHTML = '<option value="ALL">Semua Divisi</option>' + Object.keys(struktur).map(d => `<option value="${d}">${d}</option>`).join('');
   const periodeSet = [...new Set(arsip.map(r => r.periode))].sort();
   const fp2 = document.getElementById('filterPeriodeAnalitik');
-  if (fp2) fp2.innerHTML = `<option value="ALL">Semua Periode</option>` + periodeSet.map(p => `<option value="${p}">${p}</option>`).join('');
+  if (fp2) fp2.innerHTML = '<option value="ALL">Semua Periode</option>' + periodeSet.map(p => `<option value="${p}">${p}</option>`).join('');
 }
 
 // ─── LOAD TEMPLATE ────────────────────────────────────────────────────────────
@@ -641,23 +649,21 @@ async function loadTemplate() {
 function loadTemplateFromState(sub) {
   if (!sub) return;
   let t = template[sub];
-  if (!t) {
-    t = { kpi:[{area:'General',kpi:`Item KPI ${sub}`,bobot:100,logika:'max',target:100,realisasi:100,cara:'Internal'}], kompetensi:[{nama:'Kompetensi Umum',bobot:100,skor:80}] };
-  }
-  kpiRows = t.kpi.map((k,i) => ({ ...k, id: i }));
-  komRows = t.kompetensi.map((k,i) => ({ ...k, id: i }));
+  if (!t) t = { kpi:[{area:'General',kpi:'Item KPI '+sub,bobot:100,logika:'max',target:100,realisasi:100,cara:'Internal'}], kompetensi:[{nama:'Kompetensi Umum',bobot:100,skor:80}] };
+  kpiRows = t.kpi.map((k, i) => ({ ...k, id: i }));
+  komRows = t.kompetensi.map((k, i) => ({ ...k, id: i }));
   rowId = kpiRows.length + komRows.length;
   renderKPIRows();
   renderKomRows();
-  hitungTotal();
+  updateTotalsUI(); // FIX B1: only update totals, never re-render rows from here
 }
 
 function onDivisiChange() {
   renderSubPosisiDropdown();
+  kpiRows = []; komRows = [];
   document.getElementById('kpiRowsContainer').innerHTML = '';
   document.getElementById('komRowsContainer').innerHTML = '';
-  kpiRows = []; komRows = [];
-  hitungTotal();
+  updateTotalsUI();
 }
 
 // ─── KPI ROWS RENDER ──────────────────────────────────────────────────────────
@@ -677,33 +683,33 @@ function renderKPIRows() {
       </div>
       <div class="kpi-grid-2">
         <div><label class="field-label">Area</label>
-          <input class="field-input" value="${row.area}" oninput="updateKPI(${row.id},'area',this.value)"></div>
+          <input class="field-input" value="${row.area}" oninput="updateKPIField(${row.id},'area',this.value)"></div>
         <div><label class="field-label">Bobot (%)</label>
-          <input class="field-input" type="number" value="${row.bobot}" oninput="updateKPI(${row.id},'bobot',+this.value)"></div>
+          <input class="field-input" type="number" value="${row.bobot}" oninput="updateKPIField(${row.id},'bobot',+this.value||0)"></div>
       </div>
       <div style="margin-bottom:8px"><label class="field-label">Nama KPI</label>
-        <input class="field-input" value="${row.kpi}" oninput="updateKPI(${row.id},'kpi',this.value)"></div>
+        <input class="field-input" value="${row.kpi}" oninput="updateKPIField(${row.id},'kpi',this.value)"></div>
       <div class="kpi-grid-3">
         <div><label class="field-label">Logika</label>
-          <select class="field-select" onchange="updateKPI(${row.id},'logika',this.value)">
-            <option value="max" ${row.logika==='max'?'selected':''}>≥ Besar</option>
-            <option value="min" ${row.logika==='min'?'selected':''}>≤ Kecil</option>
+          <select class="field-select" onchange="updateKPIField(${row.id},'logika',this.value)">
+            <option value="max" ${row.logika==='max'?'selected':''}>&#x2265; Besar</option>
+            <option value="min" ${row.logika==='min'?'selected':''}>&#x2264; Kecil</option>
           </select></div>
         <div><label class="field-label">Target</label>
-          <input class="field-input" type="number" value="${row.target}" oninput="updateKPI(${row.id},'target',+this.value)"></div>
+          <input class="field-input" type="number" value="${row.target}" oninput="updateKPIField(${row.id},'target',+this.value||0)"></div>
         <div><label class="field-label">Realisasi</label>
-          <input class="field-input" type="number" value="${row.realisasi}" oninput="updateKPI(${row.id},'realisasi',+this.value)"></div>
+          <input class="field-input" type="number" value="${row.realisasi}" oninput="updateKPIField(${row.id},'realisasi',+this.value||0)"></div>
       </div>
       <div style="margin-bottom:8px"><label class="field-label">Cara Ukur</label>
-        <input class="field-input" value="${row.cara}" oninput="updateKPI(${row.id},'cara',this.value)"></div>
+        <input class="field-input" value="${row.cara}" oninput="updateKPIField(${row.id},'cara',this.value)"></div>
       <div class="kpi-stats-row">
         <div class="kpi-stat" style="background:#dcfce7">
           <div class="kpi-stat-label" style="color:#166534">Capaian</div>
-          <div class="kpi-stat-val" style="color:#16a34a">${(cap*100).toFixed(1)}%</div>
+          <div class="kpi-stat-val" id="capVal_${row.id}" style="color:#16a34a">${(cap*100).toFixed(1)}%</div>
         </div>
         <div class="kpi-stat" style="background:#dbeafe">
           <div class="kpi-stat-label" style="color:#1e40af">Nilai KPI</div>
-          <div class="kpi-stat-val" style="color:#2563eb">${nilai.toFixed(1)}</div>
+          <div class="kpi-stat-val" id="nilaiVal_${row.id}" style="color:#2563eb">${nilai.toFixed(1)}</div>
         </div>
       </div>`;
     c.appendChild(div);
@@ -724,46 +730,48 @@ function renderKomRows() {
       </div>
       <div class="kom-grid">
         <div><label class="field-label">Nama Kompetensi</label>
-          <input class="field-input" value="${row.nama}" oninput="updateKom(${row.id},'nama',this.value)"></div>
+          <input class="field-input" value="${row.nama}" oninput="updateKomField(${row.id},'nama',this.value)"></div>
         <div><label class="field-label">Bobot (%)</label>
-          <input class="field-input" type="number" value="${row.bobot}" oninput="updateKom(${row.id},'bobot',+this.value)"></div>
+          <input class="field-input" type="number" value="${row.bobot}" oninput="updateKomField(${row.id},'bobot',+this.value||0)"></div>
         <div><label class="field-label">Skor (1-100)</label>
-          <input class="field-input" type="number" value="${row.skor}" oninput="updateKom(${row.id},'skor',+this.value)"></div>
+          <input class="field-input" type="number" value="${row.skor}" oninput="updateKomField(${row.id},'skor',+this.value||0)"></div>
       </div>`;
     c.appendChild(div);
   });
 }
 
 // ─── ROW OPERATIONS ───────────────────────────────────────────────────────────
-function updateKPI(id, field, val) {
+// FIX B1: updateKPIField only updates totals UI (not full re-render)
+function updateKPIField(id, field, val) {
   kpiRows = kpiRows.map(r => r.id === id ? { ...r, [field]: val } : r);
-  hitungTotal();
+  updateTotalsUI();
   scheduleAutoSave();
 }
-function updateKom(id, field, val) {
+function updateKomField(id, field, val) {
   komRows = komRows.map(r => r.id === id ? { ...r, [field]: val } : r);
-  hitungTotal();
+  updateTotalsUI();
   scheduleAutoSave();
 }
 function tambahKPIRow() {
   kpiRows.push({ id: rowId++, area:'Custom', kpi:'Item Baru', bobot:20, logika:'max', target:100, realisasi:100, cara:'Sistem' });
-  renderKPIRows(); hitungTotal(); scheduleAutoSave();
+  renderKPIRows(); updateTotalsUI(); scheduleAutoSave();
 }
 function hapusKPIRow(id) {
   kpiRows = kpiRows.filter(r => r.id !== id);
-  renderKPIRows(); hitungTotal(); scheduleAutoSave();
+  renderKPIRows(); updateTotalsUI(); scheduleAutoSave();
 }
 function tambahKomRow() {
   komRows.push({ id: rowId++, nama:'Aspek Baru', bobot:20, skor:80 });
-  renderKomRows(); hitungTotal(); scheduleAutoSave();
+  renderKomRows(); updateTotalsUI(); scheduleAutoSave();
 }
 function hapusKomRow(id) {
   komRows = komRows.filter(r => r.id !== id);
-  renderKomRows(); hitungTotal(); scheduleAutoSave();
+  renderKomRows(); updateTotalsUI(); scheduleAutoSave();
 }
 
 // ─── KALKULASI ────────────────────────────────────────────────────────────────
-function hitungTotal() {
+// FIX B1: updateTotalsUI updates number displays + per-row badges WITHOUT re-rendering rows
+function updateTotalsUI() {
   const totalNilaiKPI = kpiRows.reduce((s, r) => s + capaian(r.logika, r.target, r.realisasi) * r.bobot, 0);
   const totalBobotKPI = kpiRows.reduce((s, r) => s + (r.bobot || 0), 0);
   const totalNilaiKom = komRows.reduce((s, r) => s + r.skor * (r.bobot / 100), 0);
@@ -779,13 +787,14 @@ function hitungTotal() {
   document.getElementById('nilaiAkhirStatus').textContent = st.label;
   document.getElementById('nilaiAkhirBox').style.background = st.bg;
 
-  // Update capaian labels in kpi cards without full re-render
+  // update per-row capaian badges in-place (no DOM rebuild)
   kpiRows.forEach(r => {
     const cap = capaian(r.logika, r.target, r.realisasi);
-    const nilai = cap * r.bobot;
-    // find stat vals — safer to just re-render small piece
+    const el1 = document.getElementById('capVal_' + r.id);
+    const el2 = document.getElementById('nilaiVal_' + r.id);
+    if (el1) el1.textContent = (cap * 100).toFixed(1) + '%';
+    if (el2) el2.textContent = (cap * r.bobot).toFixed(1);
   });
-  renderKPIRows(); // re-render to update capaian badges
 }
 
 // ─── AUTO SAVE ────────────────────────────────────────────────────────────────
@@ -799,10 +808,12 @@ function scheduleAutoSave() {
 }
 
 async function doAutoSave() {
+  saveTimer = null; // FIX B8: reset saveTimer so polling resumes
   const sub = document.getElementById('subPosisi').value;
   if (!sub) return;
   const newTpl = { ...template, [sub]: { kpi: kpiRows.map(({id,...r})=>r), kompetensi: komRows.map(({id,...k})=>k) } };
   template = newTpl;
+  lastTemplateJSON = JSON.stringify(newTpl[sub]);
   await sb.from('template_kpi').upsert({ id: TEMPLATE_ID, data: newTpl });
   const ss = document.getElementById('saveStatus');
   ss.className = 'save-status save-saved';
@@ -816,22 +827,24 @@ async function simpanPenilaian() {
   const sub  = document.getElementById('subPosisi').value;
   if (!nama) { alert('Isi nama karyawan terlebih dahulu!'); return; }
   if (!sub)  { alert('Pilih sub-posisi terlebih dahulu!'); return; }
+  // FIX C2: check empty kpiRows
+  if (kpiRows.length === 0) { alert('Tambahkan minimal 1 item KPI sebelum menyimpan!'); return; }
 
-  const div      = document.getElementById('divisi').value;
-  const periode  = document.getElementById('periode').value;
+  const div     = document.getElementById('divisi').value;
+  const periode = document.getElementById('periode').value;
   const totalNilaiKPI = kpiRows.reduce((s, r) => s + capaian(r.logika, r.target, r.realisasi) * r.bobot, 0);
   const totalNilaiKom = komRows.reduce((s, r) => s + r.skor * (r.bobot / 100), 0);
   const nilaiAkhir    = totalNilaiKPI * 0.75 + totalNilaiKom * 0.25;
   const st            = statusInfo(nilaiAkhir);
   const rincian = kpiRows.map(r => {
     const c = capaian(r.logika, r.target, r.realisasi);
-    return { area: r.area, kpi: r.kpi, target: r.target, realisasi: r.realisasi, capaian: (c * 100).toFixed(1) + '%' };
+    return { area:r.area, kpi:r.kpi, target:r.target, realisasi:r.realisasi, capaian:(c*100).toFixed(1)+'%' };
   });
 
   const { error } = await sb.from('arsip_nilai').insert({
     id: String(Date.now()), periode, nama,
     divisi_utama: div, sub_posisi: sub,
-    struktur_lengkap: `${div} - ${sub}`,
+    struktur_lengkap: div + ' - ' + sub,
     nilai_kpi: totalNilaiKPI.toFixed(1),
     nilai_komp: totalNilaiKom.toFixed(1),
     nilai_akhir: parseFloat(nilaiAkhir.toFixed(1)),
@@ -839,10 +852,7 @@ async function simpanPenilaian() {
     rincian_kpi: rincian,
   });
   if (error) { alert('Gagal menyimpan: ' + error.message); return; }
-  const { data } = await sb.from('arsip_nilai').select('*').order('created_at', { ascending: false });
-  arsip = data || [];
-  renderFilterDropdowns();
-  alert('✅ Penilaian berhasil disimpan!');
+  showSyncToast('✅ Penilaian berhasil disimpan!');
   switchTab('dashboard');
 }
 
@@ -852,11 +862,8 @@ function renderDashboard() {
   const filtered = arsip.filter(r => fp === 'ALL' || r.sub_posisi === fp);
   const c = document.getElementById('arsipContainer');
   if (filtered.length === 0) {
-    c.innerHTML = `<div class="empty-state card">
-      <div class="empty-icon">📭</div>
-      <div class="empty-title">Belum ada data penilaian</div>
-      <div class="empty-sub">Simpan penilaian pertama dari tab Input KPI</div>
-    </div>`; return;
+    c.innerHTML = '<div class="empty-state card"><div class="empty-icon">📭</div><div class="empty-title">Belum ada data penilaian</div><div class="empty-sub">Simpan penilaian pertama dari tab Input KPI</div></div>';
+    return;
   }
   c.innerHTML = filtered.map(r => {
     const st = statusInfo(parseFloat(r.nilai_akhir) || 0);
@@ -882,7 +889,7 @@ function renderDashboard() {
         </div>
       </div>
       <div class="arsip-actions">
-        <button class="btn btn-sm btn-blue" onclick="bukaDetail('${r.id}')">🔍 Rincian KPI</button>
+        <button class="btn btn-sm btn-blue" onclick="bukaDetail('${r.id}')">&#x1F50D; Rincian KPI</button>
         <button class="btn btn-sm btn-red" onclick="hapusArsip('${r.id}')">Hapus</button>
       </div>
     </div>`;
@@ -893,6 +900,7 @@ async function hapusArsip(id) {
   konfirmasi('Hapus data penilaian ini secara permanen?', async () => {
     await sb.from('arsip_nilai').delete().eq('id', String(id));
     arsip = arsip.filter(r => r.id !== String(id));
+    lastArsipCount = arsip.length;
     renderDashboard();
     renderFilterDropdowns();
   });
@@ -902,7 +910,7 @@ async function bukaDetail(id) {
   const { data: row } = await sb.from('arsip_nilai').select('*').eq('id', String(id)).single();
   if (!row) return;
   const st = statusInfo(parseFloat(row.nilai_akhir) || 0);
-  document.getElementById('modalDetailTitle').textContent = `📋 Detail KPI — ${row.nama}`;
+  document.getElementById('modalDetailTitle').textContent = '📋 Detail KPI — ' + row.nama;
   document.getElementById('detailMeta').innerHTML = `
     <div class="detail-meta-item" style="background:#f0fdf4">
       <div class="detail-meta-eyebrow" style="color:#16a34a">Jabatan</div>
@@ -940,7 +948,6 @@ async function bukaDetail(id) {
 function renderAnalitik() {
   const fd = document.getElementById('filterDivisiAnalitik').value;
   const fp = document.getElementById('filterPeriodeAnalitik').value;
-
   const grouped = {};
   arsip.forEach(r => {
     if (fd !== 'ALL' && r.divisi_utama !== fd) return;
@@ -949,10 +956,8 @@ function renderAnalitik() {
     grouped[r.divisi_utama].total++;
     grouped[r.divisi_utama].sum += parseFloat(r.nilai_akhir) || 0;
   });
-
   const entries = Object.entries(grouped);
   const chartCard = document.getElementById('chartCard');
-
   if (entries.length > 0) {
     chartCard.style.display = 'block';
     const labels = entries.map(([k]) => k);
@@ -964,17 +969,16 @@ function renderAnalitik() {
       data: { labels, datasets: [{ label:'Rata-rata Skor', data, backgroundColor: colors, borderRadius: 6 }] },
       options: { responsive:true, maintainAspectRatio:false,
         scales: { y:{ beginAtZero:true, max:100, grid:{ color:'#d1fae5' }, ticks:{ font:{size:11}, color:'#6b7280' } }, x:{ ticks:{ font:{size:11}, color:'#6b7280' } } },
-        plugins: { legend:{ display:false }, tooltip:{ callbacks:{ label: ctx => ` ${ctx.parsed.y} / 100` } } }
+        plugins: { legend:{ display:false }, tooltip:{ callbacks:{ label: ctx => ' ' + ctx.parsed.y + ' / 100' } } }
       }
     });
   } else {
     chartCard.style.display = 'none';
     if (myChart) { myChart.destroy(); myChart = null; }
   }
-
   const c = document.getElementById('analitikContainer');
   if (entries.length === 0) {
-    c.innerHTML = `<div class="empty-state card"><div class="empty-icon">📊</div><div class="empty-title">Belum ada data untuk dianalisis</div></div>`;
+    c.innerHTML = '<div class="empty-state card"><div class="empty-icon">📊</div><div class="empty-title">Belum ada data untuk dianalisis</div></div>';
     return;
   }
   c.innerHTML = entries.map(([nama, data]) => {
@@ -991,7 +995,7 @@ function renderAnalitik() {
           ${badge(rata >= 75 ? '✓ AMAN' : '✗ DIEVALUASI', st.bg)}
         </div>
       </div>
-      <button class="btn btn-sm btn-cyan" onclick="bukaAI('${nama}')">🔍 Lihat Analisis AI</button>
+      <button class="btn btn-sm btn-cyan" onclick="bukaAI('${nama}')">&#x1F50D; Lihat Analisis AI</button>
     </div>`;
   }).join('');
 }
@@ -1005,9 +1009,8 @@ async function bukaAI(namaDivisi) {
     summary[k.kpi].total += parseFloat(k.capaian) || 0;
     summary[k.kpi].count++;
   });
-  const sorted = Object.values(summary).map(s => ({ ...s, avg: s.total/s.count })).sort((a,b) => a.avg-b.avg);
-  const top3 = sorted.slice(0, 3);
-  document.getElementById('modalAITitle').textContent = `🤖 Analisis AI — ${namaDivisi}`;
+  const top3 = Object.values(summary).map(s => ({ ...s, avg: s.total/s.count })).sort((a,b) => a.avg-b.avg).slice(0,3);
+  document.getElementById('modalAITitle').textContent = '🤖 Analisis AI — ' + namaDivisi;
   document.getElementById('modalAIBody').innerHTML = `
     <p style="font-size:13px;font-weight:600;color:#374151;margin-bottom:10px">3 KPI dengan rata-rata capaian terendah:</p>
     ${top3.map(item => `
@@ -1034,16 +1037,16 @@ async function bukaAI(namaDivisi) {
 }
 
 // ─── STRUKTUR ─────────────────────────────────────────────────────────────────
-function renderStruktur() {
-  renderDivisiDropdown();
-  renderManageSub();
+// FIX B2: renderPreviewStruktur does NOT call renderDropdownDivisi
+function renderPreviewStruktur() {
   const c = document.getElementById('previewStruktur');
+  if (!c) return;
   c.innerHTML = Object.entries(struktur).map(([div, subs]) => `
     <div style="margin-bottom:10px">
       <div style="font-weight:700;color:#374151;font-size:13px;margin-bottom:4px">📁 ${div}</div>
       <div style="padding-left:12px">
         ${subs.length === 0
-          ? `<span style="color:#9ca3af;font-size:12px">Belum ada sub-posisi</span>`
+          ? '<span style="color:#9ca3af;font-size:12px">Belum ada sub-posisi</span>'
           : subs.map(s => `<span class="div-chip">${s}</span>`).join('')}
       </div>
     </div>`).join('');
@@ -1052,59 +1055,65 @@ function renderStruktur() {
 function renderManageSub() {
   const div = document.getElementById('manageDivisiCtx').value;
   const wrap = document.getElementById('manageSub');
+  if (!wrap) return;
   if (!div) { wrap.style.display = 'none'; return; }
   wrap.style.display = 'block';
   const subs = struktur[div] || [];
   document.getElementById('selectHapusSub').innerHTML = subs.map(s => `<option value="${s}">${s}</option>`).join('');
 }
 
+// FIX B3: simpanStruktur does NOT call renderDropdownDivisi + renderStruktur (circular)
+// caller is responsible for calling the right renders after
 async function simpanStruktur() {
-  await sb.from("struktur").upsert({ id: STRUKTUR_ID, data: struktur });
-  renderDivisiDropdown();
+  await sb.from('struktur').upsert({ id: STRUKTUR_ID, data: struktur });
+  lastStrukturJSON = JSON.stringify(struktur);
+  renderDropdownDivisi();
   renderSubPosisiDropdown();
   renderManageSub();
-  renderStruktur();
+  renderPreviewStruktur();
+  renderFilterDropdowns();
 }
 
 async function tambahDivisi() {
-  const nama = document.getElementById("inputDivisiBaru").value.trim();
+  const nama = document.getElementById('inputDivisiBaru').value.trim();
   if (!nama || struktur[nama]) return;
   struktur[nama] = [];
-  document.getElementById("inputDivisiBaru").value = "";
+  document.getElementById('inputDivisiBaru').value = '';
   await simpanStruktur();
 }
 
 function hapusDivisi() {
-  const target = document.getElementById("selectHapusDivisi").value;
+  const target = document.getElementById('selectHapusDivisi').value;
   if (!target) return;
-  konfirmasi(`Hapus divisi "${target}" beserta semua sub-posisinya?`, async () => {
+  konfirmasi('Hapus divisi "' + target + '" beserta semua sub-posisinya?', async () => {
     delete struktur[target];
     await simpanStruktur();
   });
 }
 
 async function tambahSub() {
-  const div = document.getElementById("manageDivisiCtx").value;
-  const nama = document.getElementById("inputSubBaru").value.trim();
+  const div  = document.getElementById('manageDivisiCtx').value;
+  const nama = document.getElementById('inputSubBaru').value.trim();
   if (!div || !nama || (struktur[div] || []).includes(nama)) return;
   struktur[div] = [...(struktur[div] || []), nama];
-  const newTpl = { ...template, [nama]: { kpi:[{area:"General",kpi:`KPI ${nama}`,bobot:100,logika:"max",target:100,realisasi:100,cara:"Internal"}], kompetensi:[{nama:"Kompetensi Utama",bobot:100,skor:85}] } };
+  const newTpl = { ...template, [nama]: { kpi:[{area:'General',kpi:'KPI '+nama,bobot:100,logika:'max',target:100,realisasi:100,cara:'Internal'}], kompetensi:[{nama:'Kompetensi Utama',bobot:100,skor:85}] } };
   template = newTpl;
-  document.getElementById("inputSubBaru").value = "";
-  await sb.from("struktur").upsert({ id: STRUKTUR_ID, data: struktur });
-  await sb.from("template_kpi").upsert({ id: TEMPLATE_ID, data: newTpl });
-  renderDivisiDropdown();
+  document.getElementById('inputSubBaru').value = '';
+  await sb.from('struktur').upsert({ id: STRUKTUR_ID, data: struktur });
+  await sb.from('template_kpi').upsert({ id: TEMPLATE_ID, data: newTpl });
+  lastStrukturJSON = JSON.stringify(struktur);
+  renderDropdownDivisi();
   renderSubPosisiDropdown();
   renderManageSub();
-  renderStruktur();
+  renderPreviewStruktur();
   renderFilterDropdowns();
 }
 
 function hapusSub() {
-  const div    = document.getElementById("manageDivisiCtx").value;
-  const target = document.getElementById("selectHapusSub").value;
+  const div    = document.getElementById('manageDivisiCtx').value;
+  const target = document.getElementById('selectHapusSub').value;
   if (!div || !target) return;
-  konfirmasi(`Hapus sub-posisi "${target}" dari divisi ${div}?`, async () => {
+  konfirmasi('Hapus sub-posisi "' + target + '" dari divisi ' + div + '?', async () => {
     struktur[div] = struktur[div].filter(s => s !== target);
     await simpanStruktur();
   });
@@ -1145,8 +1154,11 @@ function imporData(e) {
         struktur = d.subPosisiDb; template = d.templateKpiDb;
         const { data: fresh } = await sb.from('arsip_nilai').select('*').order('created_at',{ ascending:false });
         arsip = fresh || [];
-        renderDivisiDropdown(); renderSubPosisiDropdown(); renderManageSub(); renderStruktur(); renderDashboard(); renderFilterDropdowns();
-        alert('✅ Data berhasil di-restore!');
+        lastArsipCount = arsip.length;
+        lastStrukturJSON = JSON.stringify(struktur);
+        renderDropdownDivisi(); renderSubPosisiDropdown(); renderManageSub();
+        renderPreviewStruktur(); renderDashboard(); renderFilterDropdowns();
+        showSyncToast('✅ Data berhasil di-restore!');
       });
     } catch { alert('File tidak dapat dibaca.'); }
   };
