@@ -478,41 +478,22 @@ window.onload = async function() {
   document.getElementById('subPosisi').value = firstSub;
   loadTemplateFromState(firstSub);
 
-  // ── REALTIME LISTENERS ──────────────────────────────────────────────────────
-  // arsip_nilai: sync riwayat & analitik otomatis
+  // ── REALTIME LISTENERS ───────────────────────────────────────────────────────
   sb.channel('rt-arsip')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'arsip_nilai' }, async () => {
       const { data } = await sb.from('arsip_nilai').select('*').order('created_at', { ascending: false });
       arsip = data || [];
       renderFilterDropdowns();
-      const activeTab = document.querySelector('.tab-btn.active')?.dataset.tab;
-      if (activeTab === 'dashboard') renderDashboard();
-      if (activeTab === 'analitik')  renderAnalitik();
-      showSyncToast('📊 Riwayat penilaian diperbarui');
+      const tab = document.querySelector('.tab-btn.active')?.dataset.tab;
+      if (tab === 'dashboard') renderDashboard();
+      if (tab === 'analitik')  renderAnalitik();
+      showSyncToast('📊 Data penilaian diperbarui');
     })
     .subscribe();
 
-  // template_kpi: reload template jika sub-posisi aktif berubah dari device lain
-  sb.channel('rt-template')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'template_kpi' }, async (payload) => {
-      const { data: td2 } = await sb.from('template_kpi').select('data').eq('id', TEMPLATE_ID).single();
-      if (!td2?.data) return;
-      // Hanya update jika bukan dari device ini sendiri (saveTimer = null = tidak sedang ngetik)
-      if (saveTimer) return;
-      const sub = document.getElementById('subPosisi').value;
-      const oldJSON = JSON.stringify(template[sub]);
-      template = td2.data;
-      if (JSON.stringify(template[sub]) !== oldJSON) {
-        loadTemplateFromState(sub);
-        showSyncToast('🔄 Template KPI diperbarui');
-      }
-    })
-    .subscribe();
-
-  // struktur: sync dropdown divisi & posisi
-  sb.channel("rt-struktur")
-    .on("postgres_changes", { event: "*", schema: "public", table: "struktur" }, async () => {
-      const { data: sd2 } = await sb.from("struktur").select("data").eq("id", STRUKTUR_ID).single();
+  sb.channel('rt-struktur')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'struktur' }, async () => {
+      const { data: sd2 } = await sb.from('struktur').select('data').eq('id', STRUKTUR_ID).single();
       if (!sd2?.data) return;
       struktur = sd2.data;
       renderDivisiDropdown();
@@ -520,7 +501,22 @@ window.onload = async function() {
       renderManageSub();
       renderStruktur();
       renderFilterDropdowns();
-      showSyncToast("🏢 Struktur organisasi diperbarui");
+      showSyncToast('🏢 Struktur organisasi diperbarui');
+    })
+    .subscribe();
+
+  sb.channel('rt-template')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'template_kpi' }, async () => {
+      if (saveTimer) return; // skip kalau device ini yang lagi ngetik
+      const { data: td2 } = await sb.from('template_kpi').select('data').eq('id', TEMPLATE_ID).single();
+      if (!td2?.data) return;
+      const sub = document.getElementById('subPosisi').value;
+      const oldJSON = JSON.stringify(template[sub]);
+      template = td2.data;
+      if (JSON.stringify(template[sub]) !== oldJSON) {
+        loadTemplateFromState(sub);
+        showSyncToast('🔄 Template KPI diperbarui');
+      }
     })
     .subscribe();
 };
