@@ -179,8 +179,9 @@ button{cursor:pointer}
     </div>
   </div>
   <div class="header-actions">
-    <button class="btn-header" onclick="eksporData()">📥 Ekspor</button>
-    <button class="btn-header" onclick="document.getElementById('fileImpor').click()">📤 Impor</button>
+    <button class="btn-header" id="btnRefresh" onclick="refreshSemua()">&#x1F504; <span id="refreshLabel">Refresh</span></button>
+    <button class="btn-header" onclick="eksporData()">&#x1F4E5; Ekspor</button>
+    <button class="btn-header" onclick="document.getElementById('fileImpor').click()">&#x1F4E4; Impor</button>
     <input type="file" id="fileImpor" accept=".json" style="display:none" onchange="imporData(event)">
   </div>
 </div>
@@ -471,44 +472,37 @@ window.onload = async function() {
   if (td?.data) template = td.data;
   arsip = ad || [];
   renderDivisiDropdown();
-  const firstDiv = Object.keys(struktur)[0] || '';
-  const firstSub = firstDiv ? (struktur[firstDiv][0] || '') : '';
-  document.getElementById('divisi').value = firstDiv;
-  renderSubPosisiDropdown();
-  document.getElementById('subPosisi').value = firstSub;
-  loadTemplateFromState(firstSub);
+  document.getElementById('divisi').value = '';
+  document.getElementById('subPosisi').innerHTML = '<option value="">-- Pilih Sub-Posisi --</option>';
+  document.getElementById('kpiRowsContainer').innerHTML = '';
+  document.getElementById('komRowsContainer').innerHTML = '';
 
-  // ── REALTIME LISTENERS ───────────────────────────────────────────────────────
-  sb.channel('rt-arsip')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'arsip_nilai' }, async () => {
-      const { data } = await sb.from('arsip_nilai').select('*').order('created_at', { ascending: false });
+  // ── REALTIME + POLLING FALLBACK ─────────────────────────────────────────────
+  // Realtime listeners (instant jika Supabase Realtime aktif)
+  function onArsipChange() {
+    sb.from('arsip_nilai').select('*').order('created_at', { ascending: false }).then(({ data }) => {
       arsip = data || [];
       renderFilterDropdowns();
       const tab = document.querySelector('.tab-btn.active')?.dataset.tab;
       if (tab === 'dashboard') renderDashboard();
       if (tab === 'analitik')  renderAnalitik();
       showSyncToast('📊 Data penilaian diperbarui');
-    })
-    .subscribe();
+    });
+  }
 
-  sb.channel('rt-struktur')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'struktur' }, async () => {
-      const { data: sd2 } = await sb.from('struktur').select('data').eq('id', STRUKTUR_ID).single();
+  function onStrukturChange() {
+    sb.from('struktur').select('data').eq('id', STRUKTUR_ID).single().then(({ data: sd2 }) => {
       if (!sd2?.data) return;
       struktur = sd2.data;
-      renderDivisiDropdown();
-      renderSubPosisiDropdown();
-      renderManageSub();
-      renderStruktur();
-      renderFilterDropdowns();
+      renderDivisiDropdown(); renderSubPosisiDropdown();
+      renderManageSub(); renderStruktur(); renderFilterDropdowns();
       showSyncToast('🏢 Struktur organisasi diperbarui');
-    })
-    .subscribe();
+    });
+  }
 
-  sb.channel('rt-template')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'template_kpi' }, async () => {
-      if (saveTimer) return; // skip kalau device ini yang lagi ngetik
-      const { data: td2 } = await sb.from('template_kpi').select('data').eq('id', TEMPLATE_ID).single();
+  function onTemplateChange() {
+    if (saveTimer) return;
+    sb.from('template_kpi').select('data').eq('id', TEMPLATE_ID).single().then(({ data: td2 }) => {
       if (!td2?.data) return;
       const sub = document.getElementById('subPosisi').value;
       const oldJSON = JSON.stringify(template[sub]);
@@ -517,8 +511,44 @@ window.onload = async function() {
         loadTemplateFromState(sub);
         showSyncToast('🔄 Template KPI diperbarui');
       }
-    })
-    .subscribe();
+    });
+  }
+
+  sb.channel('rt-arsip').on('postgres_changes', { event: '*', schema: 'public', table: 'arsip_nilai' }, onArsipChange).subscribe();
+  sb.channel('rt-struktur').on('postgres_changes', { event: '*', schema: 'public', table: 'struktur' }, onStrukturChange).subscribe();
+  sb.channel('rt-template').on('postgres_changes', { event: '*', schema: 'public', table: 'template_kpi' }, onTemplateChange).subscribe();
+
+  // Polling fallback setiap 8 detik (jaga-jaga kalau realtime miss event)
+  let lastArsipCount = arsip.length;
+  let lastArsipId = arsip[0]?.id || '';
+  let lastStrukturJSON = JSON.stringify(struktur);
+  let lastTemplateJSON = '';
+
+  setInterval(async () => {
+    if (saveTimer) return; // jangan ganggu user yang lagi input
+    try {
+      const [{ data: ad }, { data: sd2 }, { data: td2 }] = await Promise.all([
+        sb.from('arsip_nilai').select('id').order('created_at', { ascending: false }).limit(1),
+        sb.from('struktur').select('data').eq('id', STRUKTUR_ID).single(),
+        sb.from('template_kpi').select('data').eq('id', TEMPLATE_ID).single(),
+      ]);
+
+      // cek arsip baru
+      const latestId = ad?.[0]?.id || '';
+      if (latestId !== lastArsipId) { lastArsipId = latestId; onArsipChange(); }
+
+      // cek struktur berubah
+      const newStr = JSON.stringify(sd2?.data);
+      if (newStr !== lastStrukturJSON) { lastStrukturJSON = newStr; onStrukturChange(); }
+
+      // cek template berubah
+      const sub = document.getElementById('subPosisi').value;
+      const newTpl = JSON.stringify(td2?.data?.[sub]);
+      if (newTpl !== lastTemplateJSON && lastTemplateJSON !== '') { lastTemplateJSON = newTpl; onTemplateChange(); }
+      else lastTemplateJSON = newTpl;
+
+    } catch(e) { /* silent */ }
+  }, 8000);
 };
 
 // ── SYNC TOAST ────────────────────────────────────────────────────────────────
@@ -537,6 +567,37 @@ function showSyncToast(msg) {
   toastTimer = setTimeout(() => { toast.style.opacity = '0'; }, 3000);
 }
 
+
+// ── REFRESH MANUAL ────────────────────────────────────────────────────────────
+async function refreshSemua() {
+  const btn = document.getElementById("btnRefresh");
+  const lbl = document.getElementById("refreshLabel");
+  btn.disabled = true;
+  lbl.textContent = "...";
+  try {
+    const [{ data: ad }, { data: sd2 }, { data: td2 }] = await Promise.all([
+      sb.from("arsip_nilai").select("*").order("created_at", { ascending: false }),
+      sb.from("struktur").select("data").eq("id", STRUKTUR_ID).single(),
+      sb.from("template_kpi").select("data").eq("id", TEMPLATE_ID).single(),
+    ]);
+    arsip = ad || [];
+    if (sd2?.data) struktur = sd2.data;
+    if (td2?.data) template = td2.data;
+    renderDivisiDropdown(); renderSubPosisiDropdown();
+    renderManageSub(); renderStruktur(); renderFilterDropdowns();
+    const tab = document.querySelector(".tab-btn.active")?.dataset.tab;
+    if (tab === "dashboard") renderDashboard();
+    if (tab === "analitik")  renderAnalitik();
+    const sub = document.getElementById("subPosisi").value;
+    if (sub) loadTemplateFromState(sub);
+    showSyncToast("✅ Data berhasil diperbarui");
+  } catch(e) {
+    showSyncToast("❌ Gagal refresh: " + e.message);
+  } finally {
+    btn.disabled = false;
+    lbl.textContent = "Refresh";
+  }
+}
 // ─── DROPDOWN RENDERS ────────────────────────────────────────────────────────
 function renderDivisiDropdown() {
   const divs = Object.keys(struktur);
@@ -547,7 +608,7 @@ function renderDivisiDropdown() {
     if (id === 'manageDivisiCtx') {
       el.innerHTML = `<option value="">-- Pilih Divisi --</option>` + divs.map(d => `<option value="${d}">${d}</option>`).join('');
     } else {
-      el.innerHTML = divs.map(d => `<option value="${d}">${d}</option>`).join('');
+      el.innerHTML = `<option value="">-- Pilih Divisi --</option>` + divs.map(d => `<option value="${d}">${d}</option>`).join('');
     }
     if (prev && divs.includes(prev)) el.value = prev;
   });
@@ -558,7 +619,8 @@ function renderDivisiDropdown() {
 function renderSubPosisiDropdown() {
   const div = document.getElementById('divisi').value;
   const subs = struktur[div] || [];
-  document.getElementById('subPosisi').innerHTML = subs.map(s => `<option value="${s}">${s}</option>`).join('');
+  document.getElementById('subPosisi').innerHTML = `<option value="">-- Pilih Sub-Posisi --</option>` + subs.map(s => `<option value="${s}">${s}</option>`).join('');
+}
 }
 
 function renderFilterDropdowns() {
@@ -597,7 +659,10 @@ function loadTemplateFromState(sub) {
 
 function onDivisiChange() {
   renderSubPosisiDropdown();
-  loadTemplate();
+  document.getElementById('kpiRowsContainer').innerHTML = '';
+  document.getElementById('komRowsContainer').innerHTML = '';
+  kpiRows = []; komRows = [];
+  hitungTotal();
 }
 
 // ─── KPI ROWS RENDER ──────────────────────────────────────────────────────────
