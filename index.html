@@ -520,22 +520,21 @@ window.onload = async function() {
 
   // Polling fallback setiap 8 detik (jaga-jaga kalau realtime miss event)
   let lastArsipCount = arsip.length;
-  let lastArsipId = arsip[0]?.id || '';
   let lastStrukturJSON = JSON.stringify(struktur);
   let lastTemplateJSON = '';
 
   setInterval(async () => {
-    if (saveTimer) return; // jangan ganggu user yang lagi input
+    if (saveTimer) return;
     try {
-      const [{ data: ad }, { data: sd2 }, { data: td2 }] = await Promise.all([
-        sb.from('arsip_nilai').select('id').order('created_at', { ascending: false }).limit(1),
+      const [countRes, { data: sd2 }, { data: td2 }] = await Promise.all([
+        sb.from('arsip_nilai').select('*', { count: 'exact', head: true }),
         sb.from('struktur').select('data').eq('id', STRUKTUR_ID).single(),
         sb.from('template_kpi').select('data').eq('id', TEMPLATE_ID).single(),
       ]);
 
-      // cek arsip baru
-      const latestId = ad?.[0]?.id || '';
-      if (latestId !== lastArsipId) { lastArsipId = latestId; onArsipChange(); }
+      // cek arsip: bandingkan count, bukan ID
+      const currentCount = countRes.count ?? 0;
+      if (currentCount !== lastArsipCount) { lastArsipCount = currentCount; onArsipChange(); }
 
       // cek struktur berubah
       const newStr = JSON.stringify(sd2?.data);
